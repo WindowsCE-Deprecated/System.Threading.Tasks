@@ -40,9 +40,12 @@ EXIT /B %ERRORLEVEL%
 :CopyResource
 set lang=%~1
 
-if exist "%output%\%platform%\%lang%\%assembly%.dll" (
+if exist "%output%\%platform%\%lang%\%assembly%.resources.dll" (
     mkdir "%nuget_folder%\lib\%platform%\%lang%" > nul || EXIT /B 1
-    copy "%output%\%platform%\%lang%\%assembly%.dll" "%nuget_folder%\lib\%platform%\%lang%\" > nul || EXIT /B 1
+    copy "%output%\%platform%\%lang%\%assembly%.resources.dll" "%nuget_folder%\lib\%platform%\%lang%\" > nul || EXIT /B 1
+) else (
+    echo [WARNING] Resources for %lang% language was not found
+    REM echo [WARNING] %output%\%platform%\%lang%\%assembly%.dll
 )
 
 set lang=

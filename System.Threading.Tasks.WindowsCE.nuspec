@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>System.Threading.Tasks.WindowsCE</id>
+    <version>$version$</version>
+    <title>System.Threading.Tasks for WindowsCE</title>
+    <authors>Fabricio Godoy</authors>
+    <owners>skarllot,fgodoy-verion</owners>
+    <licenseUrl>https://github.com/WindowsCE/System.Threading.Tasks/blob/master/LICENSE.txt</licenseUrl>
+    <projectUrl>https://github.com/WindowsCE/System.Threading.Tasks</projectUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <copyright>Copyright © Fabrício Godoy</copyright>
+    <summary>Provides types that simplify the work of writing concurrent and asynchronous code</summary>
+    <description>Provides types that simplify the work of writing concurrent and asynchronous code.
+
+Commonly Used Types:
+System.Threading.Tasks.Task&lt;TResult&gt;
+System.Runtime.CompilerServices.TaskAwaiter&lt;TResult&gt;
+System.Threading.Tasks.TaskCompletionSource&lt;TResult&gt;
+System.Threading.Tasks.Task
+System.OperationCanceledException
+System.AggregateException
+ 
+Mimics the package System.Threading.Tasks.</description>
+    <language>en-US</language>
+    <tags>net35-cf,windowsce,wince,netstandard,netstandard1.0,task,async,await</tags>
+    <dependencies>
+      <group targetFramework=".NETFramework3.5-CompactFramework">
+        <dependency id="System.Runtime.WindowsCE" version="[1.0.1, )" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

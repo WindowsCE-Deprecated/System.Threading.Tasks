@@ -8,6 +8,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{395BE41E-DFEF-4B4A-9625-3195C6957BD2}"
 	ProjectSection(SolutionItems) = preProject
 		global.json = global.json
+		System.Threading.Tasks.WindowsCE.nuspec = System.Threading.Tasks.WindowsCE.nuspec
 	EndProjectSection
 EndProject
 Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "Tasks", "src\System.Threading.Tasks.WindowsCE\Tasks.xproj", "{8D895201-4AC9-4E2B-865D-852425982609}"
