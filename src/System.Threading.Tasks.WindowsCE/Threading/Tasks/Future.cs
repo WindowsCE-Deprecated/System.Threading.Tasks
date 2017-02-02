@@ -46,6 +46,14 @@
         { }
 
         /// <summary>
+        /// Internal constructor to create an empty task.
+        /// </summary>
+        /// <param name="state">An object representing data to be used by the action.</param>
+        internal Task(object state)
+            : base(state)
+        { }
+
+        /// <summary>
         /// Internal constructor to create an already-completed task.
         /// </summary>
         internal Task(TResult result, Exception ex)

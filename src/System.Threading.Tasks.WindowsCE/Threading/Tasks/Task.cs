@@ -210,6 +210,17 @@ namespace System.Threading.Tasks
         }
 
         /// <summary>
+        /// Internal constructor to create an empty task.
+        /// </summary>
+        /// <param name="state">An object representing data to be used by the action.</param>
+        internal Task(object state)
+        {
+            _stateFlags = 0;
+            m_stateObject = state;
+            m_taskCompletedEvent = new ManualResetEvent(false);
+        }
+
+        /// <summary>
         /// Internal constructor to create an already-completed task.
         /// </summary>
         internal Task(Exception ex)
@@ -224,6 +235,9 @@ namespace System.Threading.Tasks
         /// <summary>
         /// Internal constructor to allow creation of continue tasks.
         /// </summary>
+        /// <param name="action">The delegate that represents the code to execute in the Task.</param>
+        /// <param name="state">An object representing data to be used by the action.</param>
+        /// <param name="continueSource">The task that run before current one.</param>
         protected Task(Delegate action, object state, Task continueSource)
         {
             if (action == null)
@@ -299,7 +313,11 @@ namespace System.Threading.Tasks
         // Atomically mark a Task as completed while making sure that it is not already completed.
         internal bool TrySetCompleted()
         {
-            return AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK);
+            if (!AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK))
+                return false;
+
+            m_taskCompletedEvent.Set();
+            return true;
         }
 
         internal bool TrySetException(Exception e)
@@ -313,6 +331,7 @@ namespace System.Threading.Tasks
             else
                 m_exceptions.Add(e);
 
+            m_taskCompletedEvent.Set();
             return true;
         }
 
