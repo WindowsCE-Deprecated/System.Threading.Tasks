@@ -15,7 +15,8 @@ namespace System.Threading
     /// </summary>
     public class SynchronizationContext
     {
-        private static readonly Dictionary<int, SynchronizationContext> _syncContexts = new Dictionary<int, SynchronizationContext>();
+        private static readonly Dictionary<int, SynchronizationContext> _syncContexts
+            = new Dictionary<int, SynchronizationContext>();
 
         /// <summary>
         /// Initializes a new instance of <see cref="SynchronizationContext"/> class.
@@ -79,7 +80,7 @@ namespace System.Threading
         /// <param name="state">The object passed to the delegate.</param>
         public virtual void Post(SendOrPostCallback d, object state)
         {
-            ThreadPool.QueueUserWorkItem(new WaitCallback(d.Invoke), state);
+            ThreadPool.QueueUserWorkItem(new WaitCallback(d), state);
         }
 
         /// <summary>

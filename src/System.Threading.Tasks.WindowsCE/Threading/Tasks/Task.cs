@@ -613,7 +613,7 @@ namespace System.Threading.Tasks
                     if (syncContext == null)
                         callback(ar);
                     else
-                        syncContext.Send(s => { callback((IAsyncResult)s); }, ar);
+                        syncContext.Post(s => { callback((IAsyncResult)s); }, ar);
                 }
             };
 
@@ -740,7 +740,7 @@ namespace System.Threading.Tasks
                     if (syncContext == null)
                         callback(ar);
                     else
-                        syncContext.Send(s => { callback((IAsyncResult)s); }, ar);
+                        syncContext.Post(s => { callback((IAsyncResult)s); }, ar);
                 }
             };
 
@@ -809,12 +809,26 @@ namespace System.Threading.Tasks
         }
 
         /// <summary>
-        /// Gets an awaiter to await this <see cref="Task"/>
+        /// Gets an awaiter to await this <see cref="Task"/>.
         /// </summary>
         /// <returns>A new awaiter instance.</returns>
         public Runtime.CompilerServices.TaskAwaiter GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter(this);
+        }
+
+        /// <summary>
+        /// Configures an awaiter used to await this <see cref="Task"/>.
+        /// </summary>
+        /// <param name="continueOnCapturedContext">
+        /// true to attempt to marshal the continuation back to the original
+        /// context captured; otherwise, false.
+        /// </param>
+        /// <returns>A new awaiter instance.</returns>
+        public Runtime.CompilerServices.ConfiguredTaskAwaitable ConfigureAwait(bool continueOnCapturedContext)
+        {
+            return new Runtime.CompilerServices.ConfiguredTaskAwaitable(
+                this, continueOnCapturedContext);
         }
 
         #endregion

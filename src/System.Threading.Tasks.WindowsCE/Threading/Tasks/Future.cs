@@ -150,6 +150,20 @@
             return new Runtime.CompilerServices.TaskAwaiter<TResult>(this);
         }
 
+        /// <summary>
+        /// Configures an awaiter used to await this <see cref="Task"/>.
+        /// </summary>
+        /// <param name="continueOnCapturedContext">
+        /// true to attempt to marshal the continuation back to the original
+        /// context captured; otherwise, false.
+        /// </param>
+        /// <returns>A new awaiter instance.</returns>
+        public new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
+        {
+            return new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult>(
+                this, continueOnCapturedContext);
+        }
+
         #endregion
     }
 }
