@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace System.Threading
+﻿namespace System.Threading
 {
     /// <summary>
     /// Represents a method to be called when a message is to be dispatched to
@@ -15,8 +13,8 @@ namespace System.Threading
     /// </summary>
     public class SynchronizationContext
     {
-        private static readonly Dictionary<int, SynchronizationContext> _syncContexts
-            = new Dictionary<int, SynchronizationContext>();
+        private static readonly LocalDataStoreSlot _syncContextSlot
+            = Thread.AllocateDataSlot();
 
         /// <summary>
         /// Initializes a new instance of <see cref="SynchronizationContext"/> class.
@@ -30,15 +28,8 @@ namespace System.Threading
         {
             get
             {
-                int id = Thread.CurrentThread.ManagedThreadId;
-
-                lock (_syncContexts)
-                {
-                    if (_syncContexts.ContainsKey(id))
-                        return _syncContexts[id];
-                }
-
-                return null;
+                object value = Thread.GetData(_syncContextSlot);
+                return value as SynchronizationContext;
             }
         }
 
@@ -50,15 +41,7 @@ namespace System.Threading
         /// </param>
         public static void SetSynchronizationContext(SynchronizationContext syncContext)
         {
-            int id = Thread.CurrentThread.ManagedThreadId;
-
-            lock (_syncContexts)
-            {
-                if (_syncContexts.ContainsKey(id))
-                    _syncContexts[id] = syncContext;
-                else
-                    _syncContexts.Add(id, syncContext);
-            }
+            Thread.SetData(_syncContextSlot, syncContext);
         }
 
         /// <summary>
