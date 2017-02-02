@@ -1,0 +1,44 @@
+﻿{
+  "title": "System.Threading.Tasks.WindowsCE",
+  "version": "1.0.0-*",
+  "language": "en-US",
+  "authors": [ "Fabricio Godoy" ],
+  "packOptions": {
+    "summary": "Provides types that simplify the work of writing concurrent and asynchronous code",
+    "owners": [ "skarllot", "fgodoy-verion" ],
+    "tags": [ "net35-cf", "windowsce", "wince", "netstandard", "netstandard1.0", "task", "async", "await" ],
+    "projectUrl": "https://github.com/WindowsCE/System.Threading.Tasks",
+    "licenseUrl": "https://github.com/WindowsCE/System.Threading.Tasks/blob/master/LICENSE.txt",
+    "requireLicenseAcceptance": true,
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/WindowsCE/System.Threading.Tasks.git"
+    }
+  },
+
+  "buildOptions": {
+    "keyFile": "../../tools/keypair.snk",
+    "nowarn": [ "CS1591" ],
+    "outputName": "System.Threading.Tasks",
+    "xmlDoc": true,
+    "warningsAsErrors": true
+  },
+
+  "frameworks": {
+    "net35-cf": {
+      "buildOptions": {
+        "define": [
+          "WindowsCE"
+        ]
+      },
+      "frameworkAssemblies": {
+        "mscorlib": "",
+        "System": "",
+        "System.Core": ""
+      },
+      "dependencies": {
+        "System.Runtime.WindowsCE": "1.0.1"
+      }
+    }
+  }
+}
