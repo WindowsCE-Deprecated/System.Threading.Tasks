@@ -49,9 +49,10 @@ namespace System.Threading
         /// </param>
         public static void SetSynchronizationContext(SynchronizationContext syncContext)
         {
+            int id = Thread.CurrentThread.ManagedThreadId;
+
             lock (_syncContexts)
             {
-                int id = Thread.CurrentThread.ManagedThreadId;
                 if (_syncContexts.ContainsKey(id))
                     _syncContexts[id] = syncContext;
                 else

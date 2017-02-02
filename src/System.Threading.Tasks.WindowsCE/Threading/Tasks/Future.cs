@@ -39,6 +39,13 @@
         #region Constructors
 
         /// <summary>
+        /// Internal constructor to create an empty task.
+        /// </summary>
+        internal Task()
+            : base()
+        { }
+
+        /// <summary>
         /// Internal constructor to create an already-completed task.
         /// </summary>
         internal Task(TResult result, Exception ex)
@@ -88,6 +95,19 @@
 
         #endregion
 
+        #region Helper methods
+
+        internal bool TrySetResult(TResult result)
+        {
+            if (!TrySetCompleted())
+                return false;
+
+            _result = result;
+            return true;
+        }
+
+        #endregion
+
         #region Task thread execution
 
         /// <summary>
@@ -119,6 +139,15 @@
             {
                 throw new InvalidOperationException("Unexpected action type");
             }
+        }
+
+        #endregion
+
+        #region Wait methods
+
+        public new Runtime.CompilerServices.TaskAwaiter<TResult> GetAwaiter()
+        {
+            return new Runtime.CompilerServices.TaskAwaiter<TResult>(this);
         }
 
         #endregion

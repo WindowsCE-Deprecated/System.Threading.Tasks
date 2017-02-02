@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "Tasks", "src\System.Threading.Tasks.WindowsCE\Tasks.xproj", "{8D895201-4AC9-4E2B-865D-852425982609}"
 EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "CompilerOutput", "src\CompilerOutput\CompilerOutput.xproj", "{BFAAA562-3857-40D6-B2D2-53C86A9082DC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,11 +24,16 @@ Global
 		{8D895201-4AC9-4E2B-865D-852425982609}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8D895201-4AC9-4E2B-865D-852425982609}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8D895201-4AC9-4E2B-865D-852425982609}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFAAA562-3857-40D6-B2D2-53C86A9082DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFAAA562-3857-40D6-B2D2-53C86A9082DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFAAA562-3857-40D6-B2D2-53C86A9082DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFAAA562-3857-40D6-B2D2-53C86A9082DC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8D895201-4AC9-4E2B-865D-852425982609} = {5683E1B9-A6EB-4D6B-AB2B-F219C4A0DC9E}
+		{BFAAA562-3857-40D6-B2D2-53C86A9082DC} = {5683E1B9-A6EB-4D6B-AB2B-F219C4A0DC9E}
 	EndGlobalSection
 EndGlobal

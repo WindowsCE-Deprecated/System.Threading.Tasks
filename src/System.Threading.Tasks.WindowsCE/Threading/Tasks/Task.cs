@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 
 namespace System.Threading.Tasks
 {
@@ -202,7 +203,7 @@ namespace System.Threading.Tasks
         /// <summary>
         /// Internal constructor to create an empty task.
         /// </summary>
-        protected Task()
+        internal Task()
         {
             _stateFlags = 0;
             m_taskCompletedEvent = new ManualResetEvent(false);
@@ -211,7 +212,7 @@ namespace System.Threading.Tasks
         /// <summary>
         /// Internal constructor to create an already-completed task.
         /// </summary>
-        protected Task(Exception ex)
+        internal Task(Exception ex)
         {
             _stateFlags = TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION;
             m_taskCompletedEvent = new ManualResetEvent(true);
@@ -293,6 +294,26 @@ namespace System.Threading.Tasks
         private bool MarkStarted()
         {
             return AtomicStateUpdate(TASK_STATE_STARTED, TASK_STATE_CANCELED | TASK_STATE_STARTED);
+        }
+
+        // Atomically mark a Task as completed while making sure that it is not already completed.
+        internal bool TrySetCompleted()
+        {
+            return AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK);
+        }
+
+        internal bool TrySetException(Exception e)
+        {
+            if (!AtomicStateUpdate(TASK_STATE_FAULTED, TASK_STATE_CANCELED | TASK_STATE_RAN_TO_COMPLETION))
+                return false;
+
+            AggregateException agg = e as AggregateException;
+            if (agg != null)
+                m_exceptions.AddRange(agg.InnerExceptions);
+            else
+                m_exceptions.Add(e);
+
+            return true;
         }
 
         private static int NewId()
@@ -478,7 +499,7 @@ namespace System.Threading.Tasks
             m_taskCompletedEvent.WaitOne();
 
             if (m_exceptions.Count > 0)
-                throw this.Exception;
+                ExceptionDispatchInfo.Capture(this.Exception).Throw();
         }
 
         /// <summary>
@@ -513,7 +534,7 @@ namespace System.Threading.Tasks
             var success = m_taskCompletedEvent.WaitOne((int)totalMilliseconds, false);
 
             if (m_exceptions.Count > 0)
-                throw this.Exception;
+                ExceptionDispatchInfo.Capture(this.Exception).Throw();
 
             return success;
         }
@@ -548,7 +569,7 @@ namespace System.Threading.Tasks
             var success = m_taskCompletedEvent.WaitOne(millisecondsTimeout, false);
 
             if (m_exceptions.Count > 0)
-                throw this.Exception;
+                ExceptionDispatchInfo.Capture(this.Exception).Throw();
 
             return success;
         }
@@ -771,7 +792,7 @@ namespace System.Threading.Tasks
             bool result = InternalEndWait(asyncResult);
 
             if (m_exceptions.Count > 0)
-                throw this.Exception;
+                ExceptionDispatchInfo.Capture(this.Exception).Throw();
 
             return result;
         }
@@ -785,6 +806,15 @@ namespace System.Threading.Tasks
             waitHandle.Dispose();
 
             return waitHandle.Result;
+        }
+
+        /// <summary>
+        /// Gets an awaiter to await this <see cref="Task"/>
+        /// </summary>
+        /// <returns>A new awaiter instance.</returns>
+        public Runtime.CompilerServices.TaskAwaiter GetAwaiter()
+        {
+            return new Runtime.CompilerServices.TaskAwaiter(this);
         }
 
         #endregion
