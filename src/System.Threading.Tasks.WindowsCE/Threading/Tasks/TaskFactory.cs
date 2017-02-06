@@ -10,6 +10,8 @@
         /// </summary>
         public TaskFactory() { }
 
+        #region StartNew
+
         /// <summary>
         /// Creates and starts a task.
         /// </summary>
@@ -87,5 +89,249 @@
             task.Start();
             return task;
         }
+
+        #endregion
+
+        #region FromAsync Task
+
+        public Task FromAsync(
+            Func<AsyncCallback, object, IAsyncResult> beginMethod,
+            Action<IAsyncResult> endMethod,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task wrapper = new Task(state);
+            beginMethod(CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task FromAsync(
+            IAsyncResult asyncResult,
+            Action<IAsyncResult> endMethod
+            )
+        {
+            if (asyncResult == null)
+                throw new ArgumentNullException(nameof(asyncResult));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            return StartNew(() =>
+            {
+                if (!asyncResult.AsyncWaitHandle.WaitOne())
+                    throw new InvalidOperationException("Could not await for signal");
+
+                endMethod(asyncResult);
+            });
+        }
+
+        public Task FromAsync<TArg1>(
+            Func<TArg1, AsyncCallback, object, IAsyncResult> beginMethod,
+            Action<IAsyncResult> endMethod,
+            TArg1 arg1,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task wrapper = new Task(state);
+            beginMethod(arg1, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task FromAsync<TArg1, TArg2>(
+            Func<TArg1, TArg2, AsyncCallback, object, IAsyncResult> beginMethod,
+            Action<IAsyncResult> endMethod,
+            TArg1 arg1,
+            TArg2 arg2,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task wrapper = new Task(state);
+            beginMethod(arg1, arg2, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task FromAsync<TArg1, TArg2, TArg3>(
+            Func<TArg1, TArg2, TArg3, AsyncCallback, object, IAsyncResult> beginMethod,
+            Action<IAsyncResult> endMethod,
+            TArg1 arg1,
+            TArg2 arg2,
+            TArg3 arg3,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task wrapper = new Task(state);
+            beginMethod(arg1, arg2, arg3, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        private AsyncCallback CreateBeginCallback(Task wrapper, Action<IAsyncResult> endMethod)
+        {
+            return ar =>
+            {
+                bool ok;
+                try
+                {
+                    endMethod(ar);
+                    ok = wrapper.TrySetCompleted();
+                }
+                catch (Exception ex)
+                {
+                    ok = wrapper.TrySetException(ex);
+                }
+
+                if (!ok)
+                {
+                    throw new InvalidOperationException(
+                        "An attempt was made to transition a task to a final " +
+                        "state when it had already completed");
+                }
+            };
+        }
+
+        #endregion
+
+        #region FromAsync Task<TResult>
+
+        public Task<TResult> FromAsync<TResult>(
+            Func<AsyncCallback, object, IAsyncResult> beginMethod,
+            Func<IAsyncResult, TResult> endMethod,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task<TResult> wrapper = new Task<TResult>(state);
+            beginMethod(CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task<TResult> FromAsync<TResult>(
+            IAsyncResult asyncResult,
+            Func<IAsyncResult, TResult> endMethod
+            )
+        {
+            if (asyncResult == null)
+                throw new ArgumentNullException(nameof(asyncResult));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            return StartNew(() =>
+            {
+                if (!asyncResult.AsyncWaitHandle.WaitOne())
+                    throw new InvalidOperationException("Could not await for signal");
+
+                return endMethod(asyncResult);
+            });
+        }
+
+        public Task<TResult> FromAsync<TArg1, TResult>(
+            Func<TArg1, AsyncCallback, object, IAsyncResult> beginMethod,
+            Func<IAsyncResult, TResult> endMethod,
+            TArg1 arg1,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task<TResult> wrapper = new Task<TResult>(state);
+            beginMethod(arg1, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task<TResult> FromAsync<TArg1, TArg2, TResult>(
+            Func<TArg1, TArg2, AsyncCallback, object, IAsyncResult> beginMethod,
+            Func<IAsyncResult, TResult> endMethod,
+            TArg1 arg1,
+            TArg2 arg2,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task<TResult> wrapper = new Task<TResult>(state);
+            beginMethod(arg1, arg2, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        public Task<TResult> FromAsync<TArg1, TArg2, TArg3, TResult>(
+            Func<TArg1, TArg2, TArg3, AsyncCallback, object, IAsyncResult> beginMethod,
+            Func<IAsyncResult, TResult> endMethod,
+            TArg1 arg1,
+            TArg2 arg2,
+            TArg3 arg3,
+            object state
+            )
+        {
+            if (beginMethod == null)
+                throw new ArgumentNullException(nameof(beginMethod));
+            if (endMethod == null)
+                throw new ArgumentNullException(nameof(endMethod));
+
+            Task<TResult> wrapper = new Task<TResult>(state);
+            beginMethod(arg1, arg2, arg3, CreateBeginCallback(wrapper, endMethod), state);
+
+            return wrapper;
+        }
+
+        private AsyncCallback CreateBeginCallback<TResult>(Task<TResult> wrapper, Func<IAsyncResult, TResult> endMethod)
+        {
+            return ar =>
+            {
+                bool ok;
+                try
+                {
+                    var result = endMethod(ar);
+                    ok = wrapper.TrySetResult(result);
+                }
+                catch (Exception ex)
+                {
+                    ok = wrapper.TrySetException(ex);
+                }
+
+                if (!ok)
+                {
+                    throw new InvalidOperationException(
+                        "An attempt was made to transition a task to a final " +
+                        "state when it had already completed");
+                }
+            };
+        }
+
+        #endregion
     }
 }
