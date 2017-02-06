@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace System.Runtime.CompilerServices
 {
-    public struct TaskAwaiter : INotifyCompletion
+    public struct TaskAwaiter : IAwaiter, INotifyCompletion
     {
         readonly Task _task;
 

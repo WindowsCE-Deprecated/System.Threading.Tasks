@@ -7,7 +7,7 @@ namespace System.Threading.Tasks
     /// <summary>
     /// Represents an asynchronous operation.
     /// </summary>
-    public class Task : IAsyncResult, IDisposable
+    public class Task : IAsyncResult, IDisposable, ITask
     {
         private static Task _completedTask; // A task that's already been completed successfully.
         private static readonly TaskFactory _defaultFactory = new TaskFactory();
@@ -831,7 +831,7 @@ namespace System.Threading.Tasks
         /// Gets an awaiter to await this <see cref="Task"/>.
         /// </summary>
         /// <returns>A new awaiter instance.</returns>
-        public Runtime.CompilerServices.TaskAwaiter GetAwaiter()
+        public Runtime.CompilerServices.IAwaiter GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter(this);
         }
@@ -844,7 +844,7 @@ namespace System.Threading.Tasks
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public Runtime.CompilerServices.ConfiguredTaskAwaitable ConfigureAwait(bool continueOnCapturedContext)
+        public Runtime.CompilerServices.IConfiguredTask ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable(
                 this, continueOnCapturedContext);

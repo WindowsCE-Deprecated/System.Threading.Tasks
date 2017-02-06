@@ -2,7 +2,7 @@
 
 namespace System.Runtime.CompilerServices
 {
-    public struct TaskAwaiter<TResult> : INotifyCompletion
+    public struct TaskAwaiter<TResult> : IAwaiter<TResult>, INotifyCompletion
     {
         readonly Task<TResult> _task;
 

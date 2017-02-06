@@ -6,7 +6,7 @@
     /// <typeparam name="TResult">
     /// The type of the result produced by this <see cref="Task{TResult}"/>.
     /// </typeparam>
-    public class Task<TResult> : Task
+    public class Task<TResult> : Task, ITask<TResult>
     {
         private TResult _result;
 
@@ -153,7 +153,7 @@
 
         #region Wait methods
 
-        public new Runtime.CompilerServices.TaskAwaiter<TResult> GetAwaiter()
+        public new Runtime.CompilerServices.IAwaiter<TResult> GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter<TResult>(this);
         }
@@ -166,7 +166,7 @@
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
+        public new Runtime.CompilerServices.IConfiguredTask<TResult> ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult>(
                 this, continueOnCapturedContext);
