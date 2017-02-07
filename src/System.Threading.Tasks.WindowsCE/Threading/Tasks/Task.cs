@@ -24,7 +24,7 @@ namespace System.Threading.Tasks
         /// </summary>
         protected readonly object m_stateObject;
 
-        private Action _waitCallback;
+        private Action _completedCallback;
 
 
         /// <summary>
@@ -441,16 +441,14 @@ namespace System.Threading.Tasks
             }
             finally
             {
-                // Execute wait callback if any
-                bool isActionLocked = Monitor.TryEnter(m_action);
-                if (isActionLocked && _waitCallback != null)
-                    _waitCallback();
-
                 AtomicStateUpdate(TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK);
                 m_taskCompletedEvent.Set();
 
-                if (isActionLocked)
-                    Monitor.Exit(m_action);
+                // Execute wait callback if any
+                Monitor.Enter(m_action);
+                if (_completedCallback != null)
+                    _completedCallback();
+                Monitor.Exit(m_action);
             }
         }
 
@@ -643,7 +641,7 @@ namespace System.Threading.Tasks
                 if (!isTaskCompleted)
                 {
                     // Enqueue to execute when Task is finalizing
-                    _waitCallback = waitCallback;
+                    _completedCallback = waitCallback;
                 }
             }
 
@@ -742,16 +740,20 @@ namespace System.Threading.Tasks
             if (continueOnCapturedContext)
                 syncContext = SynchronizationContext.Current;
 
+            var timeTracker = new Diagnostics.Stopwatch();
+            timeTracker.Start();
             var ar = new WaitAsyncResult(stateObject);
             WaitCallback internalCallback = state =>
             {
                 // Can be called synchronously or asynchronously
                 bool needWaitSignal = (bool)state;
-                if (needWaitSignal)
-                    ar.Result = m_taskCompletedEvent.WaitOne(millisecondsTimeout, false);
+                int adjTimeout = millisecondsTimeout - (int)timeTracker.ElapsedMilliseconds;
+                if (needWaitSignal && adjTimeout > 0)
+                    ar.Result = m_taskCompletedEvent.WaitOne(adjTimeout, false);
                 else
                     ar.Result = true;
 
+                timeTracker = null;
                 ar.EventHandler.Set();
 
                 if (callback != null)
@@ -776,7 +778,7 @@ namespace System.Threading.Tasks
 
             if (isTaskCompleted)
             {
-                // Call callback synchronously
+                // Invoke callback synchronously
                 internalCallback(false);
             }
 
@@ -1207,7 +1209,9 @@ namespace System.Threading.Tasks
                     try { task.EndWait(ar); }
                     catch (Exception ex)
                     {
+                        Monitor.Enter(exceptions);
                         exceptions.Add(ex);
+                        Monitor.Exit(exceptions);
                     }
 
                     var val = Interlocked.Increment(ref completedCounter);
@@ -1323,7 +1327,9 @@ namespace System.Threading.Tasks
                     try { tasks[i].EndWait(ar); }
                     catch (Exception ex)
                     {
+                        Monitor.Enter(exceptions);
                         exceptions.Add(ex);
+                        Monitor.Exit(exceptions);
                     }
 
                     completedIndex = i;
