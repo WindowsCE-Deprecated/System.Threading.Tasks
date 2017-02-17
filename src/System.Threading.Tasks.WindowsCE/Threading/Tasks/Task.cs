@@ -231,11 +231,15 @@ namespace System.Threading.Tasks
         /// </summary>
         internal Task(Exception ex)
         {
-            _stateFlags = TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION;
             m_taskCompletedEvent = new ManualResetEvent(true);
 
-            if (ex != null)
+            if (ex == null)
+                _stateFlags = TASK_STATE_RAN_TO_COMPLETION;
+            else
+            {
+                _stateFlags = TASK_STATE_FAULTED;
                 m_exceptions.Add(ex);
+            }
         }
 
         /// <summary>
