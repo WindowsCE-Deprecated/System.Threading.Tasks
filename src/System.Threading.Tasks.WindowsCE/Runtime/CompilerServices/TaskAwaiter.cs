@@ -44,7 +44,15 @@ namespace System.Runtime.CompilerServices
                 return;
 
             // TODO: Handle cancellation
-            ExceptionDispatchInfo.Capture(task.Exception).Throw();
+            var aggEx = task.Exception;
+            if (aggEx.InnerExceptions.Count > 0)
+            {
+                ExceptionDispatchInfo.Capture(aggEx.InnerExceptions[0]).Throw();
+            }
+            else
+            {
+                throw aggEx;
+            }
         }
 
         internal static void OnCompletedInternal(Task task, Action continuation, bool continueOnCapturedContext)

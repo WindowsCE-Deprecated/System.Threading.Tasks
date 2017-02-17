@@ -107,11 +107,8 @@
 
         internal bool TrySetResult(TResult result)
         {
-            if (!TrySetCompleted())
-                return false;
-
             _result = result;
-            return true;
+            return TrySetCompleted();
         }
 
         #endregion

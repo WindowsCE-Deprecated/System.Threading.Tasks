@@ -1,4 +1,11 @@
-﻿namespace System.Threading
+﻿#if NET35_CF
+namespace System.Threading
+#else
+using System;
+using System.Threading;
+
+namespace Mock.System.Threading
+#endif
 {
     /// <summary>
     /// Represents a method to be called when a message is to be dispatched to

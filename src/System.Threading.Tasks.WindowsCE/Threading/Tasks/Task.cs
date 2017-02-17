@@ -30,6 +30,7 @@ namespace System.Threading.Tasks
         protected readonly object m_stateObject;
 
         private Action _completedCallback;
+        private readonly object _lockObj = new object();
 
 
         /// <summary>
@@ -321,7 +322,7 @@ namespace System.Threading.Tasks
             if (!AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK))
                 return false;
 
-            m_taskCompletedEvent.Set();
+            SendCompletedSignal();
             return true;
         }
 
@@ -336,7 +337,7 @@ namespace System.Threading.Tasks
             else
                 m_exceptions.Add(e);
 
-            m_taskCompletedEvent.Set();
+            SendCompletedSignal();
             return true;
         }
 
@@ -375,6 +376,20 @@ namespace System.Threading.Tasks
         internal bool IsRanToCompletion
         {
             get { return (_stateFlags & TASK_STATE_COMPLETED_MASK) == TASK_STATE_RAN_TO_COMPLETION; }
+        }
+
+        // Send signal to completed event handler and execute callback
+        private void SendCompletedSignal()
+        {
+            m_taskCompletedEvent.Set();
+
+            // Execute wait callback if any
+            lock (_lockObj)
+            {
+                if (_completedCallback != null)
+                    _completedCallback();
+
+            }
         }
 
         #endregion
@@ -447,13 +462,7 @@ namespace System.Threading.Tasks
             finally
             {
                 AtomicStateUpdate(TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK);
-                m_taskCompletedEvent.Set();
-
-                // Execute wait callback if any
-                Monitor.Enter(m_action);
-                if (_completedCallback != null)
-                    _completedCallback();
-                Monitor.Exit(m_action);
+                SendCompletedSignal();
             }
         }
 
@@ -640,13 +649,13 @@ namespace System.Threading.Tasks
             };
 
             bool isTaskCompleted = false;
-            lock (m_action)
+            lock (_lockObj)
             {
                 isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
                 if (!isTaskCompleted)
                 {
                     // Enqueue to execute when Task is finalizing
-                    _completedCallback = waitCallback;
+                    _completedCallback += waitCallback;
                 }
             }
 
@@ -771,7 +780,7 @@ namespace System.Threading.Tasks
             };
 
             bool isTaskCompleted = false;
-            lock (m_action)
+            lock (_lockObj)
             {
                 isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
                 if (!isTaskCompleted)
