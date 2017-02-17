@@ -1,6 +1,11 @@
-﻿using System.Runtime.ExceptionServices;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
+
+#if NET35_CF
+using System.Runtime.ExceptionServices;
+#else
+using Mock.System.Runtime.ExceptionServices;
+#endif
 
 namespace System.Runtime.CompilerServices
 {

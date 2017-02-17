@@ -37,7 +37,17 @@
         "System.Core": ""
       },
       "dependencies": {
-        "System.Runtime.WindowsCE": "1.0.1"
+        "System.Runtime.WindowsCE": "1.0.2"
+      }
+    },
+    "net35-client": {
+      "buildOptions": {
+        "nowarn": [ "CS0436", "CS0114" ],
+        "xmlDoc": false,
+        "warningsAsErrors": false
+      },
+      "dependencies": {
+        "System.Runtime.WindowsCE.Mock": "1.0.2"
       }
     }
   }

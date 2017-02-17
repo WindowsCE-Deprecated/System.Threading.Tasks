@@ -1,4 +1,8 @@
-﻿namespace System.Threading.Tasks
+﻿#if !NET35_CF
+using Mock.System;
+#endif
+
+namespace System.Threading.Tasks
 {
     /// <summary>
     /// Provides support for creating and scheduling <see cref="Task"/> objects.
