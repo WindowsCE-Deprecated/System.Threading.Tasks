@@ -148,8 +148,12 @@
 
         #endregion
 
-        #region Wait methods
+        #region Await support
 
+        /// <summary>
+        /// Creates an awaiter used to await this <see cref="Task{TResult}"/>.
+        /// </summary>
+        /// <returns>An awaiter instance.</returns>
         public new Runtime.CompilerServices.IAwaiter<TResult> GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter<TResult>(this);
@@ -163,7 +167,7 @@
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public new Runtime.CompilerServices.IConfiguredTask<TResult> ConfigureAwait(bool continueOnCapturedContext)
+        public new IAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult>(
                 this, continueOnCapturedContext);

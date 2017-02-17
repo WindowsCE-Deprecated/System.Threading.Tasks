@@ -1,7 +1,5 @@
 ﻿// Ref: https://github.com/jam40jeff/ITask
 
-using System.Runtime.CompilerServices;
-
 namespace System.Threading.Tasks
 {
     /// <summary>
@@ -10,7 +8,7 @@ namespace System.Threading.Tasks
     /// <typeparam name="TResult">
     /// The type of the result of the task.
     /// </typeparam>
-    public interface ITask<out TResult> : ITask
+    public interface ITask<out TResult> : ITask, IAwaitable<TResult>
     {
         /// <summary>
         /// Gets the result value of this <see cref="ITask{TResult}"/>.
@@ -22,16 +20,11 @@ namespace System.Threading.Tasks
         /// </remarks>
         TResult Result { get; }
 
-        /// <summary>Creates an awaiter used to await this <see cref="ITask{TResult}"/>.</summary>
-        /// <returns>An awaiter instance.</returns>
-        /// <remarks>This method is intended for compiler user rather than use directly in code.</remarks>
-        new IAwaiter<TResult> GetAwaiter();
-
         /// <summary>Configures an awaiter used to await this <see cref="ITask"/>.</summary>
         /// <param name="continueOnCapturedContext">
         /// true to attempt to marshal the continuation back to the original context captured; otherwise, false.
         /// </param>
         /// <returns>An object used to await this task.</returns>
-        new IConfiguredTask<TResult> ConfigureAwait(bool continueOnCapturedContext);
+        new IAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext);
     }
 }

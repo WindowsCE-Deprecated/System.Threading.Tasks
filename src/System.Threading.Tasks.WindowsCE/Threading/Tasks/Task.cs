@@ -847,6 +847,10 @@ namespace System.Threading.Tasks
             return waitHandle.Result;
         }
 
+        #endregion
+
+        #region Await Support
+
         /// <summary>
         /// Gets an awaiter to await this <see cref="Task"/>.
         /// </summary>
@@ -864,10 +868,23 @@ namespace System.Threading.Tasks
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public Runtime.CompilerServices.IConfiguredTask ConfigureAwait(bool continueOnCapturedContext)
+        public IAwaitable ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable(
                 this, continueOnCapturedContext);
+        }
+
+        /// <summary>
+        /// Creates an awaitable that asynchronously yields back to the current context when awaited.
+        /// </summary>
+        /// <returns>
+        /// A context that, when awaited, will asynchronously transition back into the current context at the 
+        /// time of the await. If the current SynchronizationContext is non-null, that is treated as the current context.
+        /// Otherwise, TaskScheduler.Current is treated as the current context.
+        /// </returns>
+        public static IAwaitable Yield()
+        {
+            return new Runtime.CompilerServices.YieldAwaitable();
         }
 
         #endregion

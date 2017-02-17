@@ -61,6 +61,7 @@
   </Choose>
   <ItemGroup>
     <Compile Include="BasicAsyncTest.cs" />
+    <Compile Include="ContinueWithTests.cs" />
     <Compile Include="FromAsyncTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

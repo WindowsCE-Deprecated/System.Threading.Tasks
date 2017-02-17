@@ -2,7 +2,7 @@
 
 namespace System.Runtime.CompilerServices
 {
-    public struct ConfiguredTaskAwaitable<TResult> : IConfiguredTask<TResult>
+    public struct ConfiguredTaskAwaitable<TResult> : IAwaitable<TResult>
     {
         readonly ConfiguredTaskAwaiter _awaiter;
 
