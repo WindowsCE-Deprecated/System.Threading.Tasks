@@ -22,7 +22,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("Retail")]
 #endif
 
-#if CLASSIC
-[assembly: AssemblyKeyFile(@"..\..\..\tools\keypair.snk")]
-[assembly: AssemblyDelaySign(true)]
-#endif
+[assembly: InternalsVisibleTo("Tasks.Tests, PublicKey=" + Consts.SkarllotPublicKey)]
