@@ -174,6 +174,7 @@ rmdir /s/q "%OutputPath%" 2> nul
 rmdir /s/q "%ObjOutputPath%" 2> nul
 
 REM Call DotNet to build project
+%dotnet% restore %SolutionDir%%Project%
 %dotnet% build %SolutionDir%%Project% -c Release -f %Framework% -b %ObjOutputPath% -o %OutputPath%
 set DOTNETERROR=%ERRORLEVEL%
 rmdir /s/q "%ObjOutputPath%"
