@@ -67,9 +67,12 @@
   </Choose>
   <ItemGroup>
     <Compile Include="BasicAsyncTest.cs" />
+    <Compile Include="CancellationTokenSourceTest.cs" />
+    <Compile Include="CancellationTokenTests.cs" />
     <Compile Include="ContinueWithTests.cs" />
     <Compile Include="FromAsyncTests.cs" />
     <Compile Include="FutureMembersTests.cs" />
+    <Compile Include="ParallelTestHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TaskBasicTests.cs" />
     <Compile Include="TaskMembersTests.cs" />

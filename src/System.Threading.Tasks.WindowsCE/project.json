@@ -37,7 +37,8 @@
         "System.Core": ""
       },
       "dependencies": {
-        "System.Runtime.WindowsCE": "1.0.2"
+        "System.Runtime.WindowsCE": "1.0.2",
+        "System.Collections.Concurrent.WindowsCE": "1.0.0"
       }
     },
     "net35-client": {
@@ -47,7 +48,8 @@
         "warningsAsErrors": false
       },
       "dependencies": {
-        "System.Runtime.WindowsCE.Mock": "1.0.2"
+        "System.Runtime.WindowsCE.Mock": "1.0.2",
+        "System.Collections.Concurrent.WindowsCE.Mock": "1.0.0"
       }
     }
   }
