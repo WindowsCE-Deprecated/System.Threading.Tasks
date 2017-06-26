@@ -23,11 +23,19 @@ namespace System.Threading.Tasks
         /// <returns>The started task.</returns>
         /// <exception cref="ArgumentNullException">The <paramref name="action"/> argument is null.</exception>
         public Task StartNew(Action action)
+            => StartNew(action, default(CancellationToken));
+
+        public Task StartNew(Action action, CancellationToken cancellationToken)
         {
             if (action == null)
-                throw new ArgumentNullException("action");
+                throw new ArgumentNullException(nameof(action));
 
-            var task = new Task(action);
+            Task task;
+            if (cancellationToken.CanBeCanceled)
+                task = new Task(action, cancellationToken);
+            else
+                task = new Task(action);
+
             task.Start();
             return task;
         }
@@ -40,11 +48,19 @@ namespace System.Threading.Tasks
         /// <returns>The started <see cref="Task"/>.</returns>
         /// <exception cref="ArgumentNullException">The <paramref name="action"/> argument is null.</exception>
         public Task StartNew(Action<object> action, object state)
+            => StartNew(action, state, default(CancellationToken));
+
+        public Task StartNew(Action<object> action, object state, CancellationToken cancellationToken)
         {
             if (action == null)
-                throw new ArgumentNullException("action");
+                throw new ArgumentNullException(nameof(action));
 
-            var task = new Task(action, state);
+            Task task;
+            if (cancellationToken.CanBeCanceled)
+                task = new Task(action, state, cancellationToken);
+            else
+                task = new Task(action, state);
+
             task.Start();
             return task;
         }
@@ -69,6 +85,21 @@ namespace System.Threading.Tasks
             return task;
         }
 
+        public Task<TResult> StartNew<TResult>(Func<TResult> function, CancellationToken cancellationToken)
+        {
+            if (function == null)
+                throw new ArgumentNullException(nameof(function));
+
+            Task<TResult> task;
+            if (cancellationToken.CanBeCanceled)
+                task = new Task<TResult>(function, cancellationToken);
+            else
+                task = new Task<TResult>(function);
+
+            task.Start();
+            return task;
+        }
+
         /// <summary>
         /// Creates and starts a <see cref="Task{TResult}"/>.
         /// </summary>
@@ -85,11 +116,19 @@ namespace System.Threading.Tasks
         /// <returns>The started <see cref="Task{TResult}"/>.</returns>
         /// <exception cref="ArgumentNullException">The exception that is thrown when the <paramref name="function"/> argument is null.</exception>
         public Task<TResult> StartNew<TResult>(Func<object, TResult> function, object state)
+            => StartNew(function, state, default(CancellationToken));
+
+        public Task<TResult> StartNew<TResult>(Func<object, TResult> function, object state, CancellationToken cancellationToken)
         {
             if (function == null)
-                throw new ArgumentNullException("function");
+                throw new ArgumentNullException(nameof(function));
 
-            var task = new Task<TResult>(function, state);
+            Task<TResult> task;
+            if (cancellationToken.CanBeCanceled)
+                task = new Task<TResult>(function, state, cancellationToken);
+            else
+                task = new Task<TResult>(function, state);
+
             task.Start();
             return task;
         }

@@ -3,8 +3,10 @@ using System.Linq;
 
 #if NET35_CF
 using System.Runtime.ExceptionServices;
+using InternalOCE = System.OperationCanceledException;
 #else
 using Mock.System.Runtime.ExceptionServices;
+using InternalOCE = Mock.System.OperationCanceledException;
 #endif
 
 namespace System.Threading.Tasks
@@ -32,7 +34,8 @@ namespace System.Threading.Tasks
         private Action _completedCallback;
         private readonly object _lockObj = new object();
 
-
+        protected CancellationToken m_cancellationToken;
+        private CancellationTokenRegistration m_cancelRegistration;
         /// <summary>
         /// A set of exceptions occurred when trying to execute current task.
         /// </summary>
@@ -77,6 +80,9 @@ namespace System.Threading.Tasks
 
 
         #region Properties
+
+        internal CancellationToken CancellationToken
+            => m_cancellationToken;
 
         /// <summary>
         /// Gets a task that's already been completed successfully.
@@ -139,6 +145,9 @@ namespace System.Threading.Tasks
             }
         }
 
+        public bool IsCanceled
+            => (_stateFlags & TASK_STATE_COMPLETED_MASK) == TASK_STATE_CANCELED;
+
         /// <summary>
         /// Gets whether this <see cref="Task">Task</see> has completed.
         /// </summary>
@@ -152,7 +161,7 @@ namespace System.Threading.Tasks
         {
             get
             {
-                // enable inlining of IsCompletedMethod by "cast"ing away the volatility
+                // enable in-lining of IsCompletedMethod by "cast"ing away the volatility
                 int stateFlags = _stateFlags;
                 return IsCompletedMethod(stateFlags);
             }
@@ -235,6 +244,11 @@ namespace System.Threading.Tasks
 
             if (ex == null)
                 _stateFlags = TASK_STATE_RAN_TO_COMPLETION;
+            else if (ex is InternalOCE)
+            {
+                _stateFlags = TASK_STATE_CANCELED;
+                m_cancellationToken = ((InternalOCE)ex).CancellationToken;
+            }
             else
             {
                 _stateFlags = TASK_STATE_FAULTED;
@@ -247,19 +261,28 @@ namespace System.Threading.Tasks
         /// </summary>
         /// <param name="action">The delegate that represents the code to execute in the Task.</param>
         /// <param name="state">An object representing data to be used by the action.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken" /> that will be assigned to the new task.</param>
         /// <param name="continueSource">The task that run before current one.</param>
-        protected Task(Delegate action, object state, Task continueSource)
+        protected Task(Delegate action, object state, CancellationToken cancellationToken, Task continueSource)
         {
             if (action == null)
-            {
-                throw new ArgumentNullException("action");
-            }
+                throw new ArgumentNullException(nameof(action));
 
             _stateFlags = 0;
             m_action = action;
             m_stateObject = state;
             m_taskCompletedEvent = new ManualResetEvent(false);
             m_continueSource = continueSource;
+
+            m_cancellationToken = cancellationToken;
+            if (cancellationToken.CanBeCanceled)
+            {
+                m_cancelRegistration = cancellationToken.Register(s =>
+                {
+                    Task task = s as Task;
+                    task.TrySetCanceled(task.m_cancellationToken);
+                }, this, false);
+            }
         }
 
         /// <summary>
@@ -268,9 +291,12 @@ namespace System.Threading.Tasks
         /// <param name="action">The delegate that represents the code to execute in the Task.</param>
         /// <exception cref="T:System.ArgumentNullException">The <paramref name="action"/> argument is null.</exception>
         public Task(Action action)
-            : this(action, null, null)
-        {
-        }
+            : this(action, null, default(CancellationToken), null)
+        { }
+
+        public Task(Action action, CancellationToken cancellationToken)
+            : this(action, null, cancellationToken, null)
+        { }
 
         /// <summary>
         /// Initializes a new <see cref="Task"/> with the specified action and state.
@@ -281,9 +307,12 @@ namespace System.Threading.Tasks
         /// The <paramref name="action"/> argument is null.
         /// </exception>
         public Task(Action<object> action, object state)
-            : this(action, state, null)
-        {
-        }
+            : this(action, state, default(CancellationToken), null)
+        { }
+
+        public Task(Action<object> action, object state, CancellationToken cancellationToken)
+            : this(action, state, cancellationToken, null)
+        { }
 
         /// <summary>
         /// Destructor to enforces disposal of unmanaged resources.
@@ -318,6 +347,16 @@ namespace System.Threading.Tasks
         private bool MarkStarted()
         {
             return AtomicStateUpdate(TASK_STATE_STARTED, TASK_STATE_CANCELED | TASK_STATE_STARTED);
+        }
+
+        internal bool TrySetCanceled(CancellationToken cancellationToken)
+        {
+            if (!AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_CANCELED, TASK_STATE_COMPLETED_MASK))
+                return false;
+
+            m_cancellationToken = cancellationToken;
+            SendCompletedSignal();
+            return true;
         }
 
         // Atomically mark a Task as completed while making sure that it is not already completed.
@@ -389,11 +428,7 @@ namespace System.Threading.Tasks
 
             // Execute wait callback if any
             lock (_lockObj)
-            {
-                if (_completedCallback != null)
-                    _completedCallback();
-
-            }
+                _completedCallback?.Invoke();
         }
 
         #endregion
@@ -452,6 +487,11 @@ namespace System.Threading.Tasks
 
                 // Execute provided action
                 ExecuteTaskAction();
+            }
+            catch (InternalOCE ex)
+            when (ex.CancellationToken == m_cancellationToken)
+            {
+                AtomicStateUpdate(TASK_STATE_CANCELED, TASK_STATE_COMPLETED_MASK);
             }
             catch (AggregateException ex)
             {
@@ -535,6 +575,9 @@ namespace System.Threading.Tasks
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
+
+            if (m_cancellationToken.IsCancellationRequested)
+                throw new AggregateException(new TaskCanceledException(this));
         }
 
         /// <summary>
@@ -571,6 +614,9 @@ namespace System.Threading.Tasks
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
 
+            if (m_cancellationToken.IsCancellationRequested)
+                throw new AggregateException(new TaskCanceledException(this));
+
             return success;
         }
 
@@ -605,6 +651,9 @@ namespace System.Threading.Tasks
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
+
+            if (m_cancellationToken.IsCancellationRequested)
+                throw new AggregateException(new TaskCanceledException(this));
 
             return success;
         }
@@ -665,7 +714,7 @@ namespace System.Threading.Tasks
 
             if (isTaskCompleted)
             {
-                // Execute callback synchrounously
+                // Execute callback synchronously
                 waitCallback();
             }
 
@@ -789,7 +838,7 @@ namespace System.Threading.Tasks
                 isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
                 if (!isTaskCompleted)
                 {
-                    // Enqueue callback for futher execution
+                    // Enqueue callback for further execution
                     ThreadPool.QueueUserWorkItem(internalCallback, true);
                 }
             }
@@ -832,6 +881,9 @@ namespace System.Threading.Tasks
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
+
+            if (m_cancellationToken.IsCancellationRequested)
+                throw new AggregateException(new TaskCanceledException(this));
 
             return result;
         }
@@ -910,17 +962,18 @@ namespace System.Threading.Tasks
         {
             if (disposing)
             {
-                if (!IsCompleted)
+                if ((_stateFlags & TASK_STATE_COMPLETED_MASK) == 0)
                 {
                     throw new InvalidOperationException(
                         "A task may only be disposed if it has completed its execution");
                 }
             }
 
-            if (m_taskCompletedEvent != null)
-                m_taskCompletedEvent.Close();
+            m_taskCompletedEvent?.Close();
+            m_cancelRegistration.Dispose();
 
             AtomicStateUpdate(TASK_STATE_DISPOSED, 0);
+            GC.SuppressFinalize(this);
         }
 
         #endregion
@@ -1025,7 +1078,7 @@ namespace System.Threading.Tasks
             if (continuationAction == null)
                 throw new ArgumentNullException("continuationAction");
 
-            var continueTask = new Task(continuationAction, state, this);
+            var continueTask = new Task(continuationAction, state, default(CancellationToken), this);
             continueTask.Start();
             return continueTask;
         }

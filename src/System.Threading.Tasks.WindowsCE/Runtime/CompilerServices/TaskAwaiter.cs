@@ -40,18 +40,17 @@ namespace System.Runtime.CompilerServices
             if (!asyncResult.AsyncWaitHandle.WaitOne())
                 throw new InvalidOperationException("Error waiting for wait handle signal");
 
-            if (task.Status == TaskStatus.RanToCompletion)
-                return;
-
-            // TODO: Handle cancellation
-            var aggEx = task.Exception;
-            if (aggEx.InnerExceptions.Count > 0)
+            switch (task.Status)
             {
-                ExceptionDispatchInfo.Capture(aggEx.InnerExceptions[0]).Throw();
-            }
-            else
-            {
-                throw aggEx;
+                case TaskStatus.RanToCompletion:
+                    return;
+                case TaskStatus.Canceled:
+                    throw new TaskCanceledException(task);
+                case TaskStatus.Faulted:
+                    ExceptionDispatchInfo.Capture(task.Exception.InnerExceptions[0]).Throw();
+                    break;
+                default:
+                    throw new InvalidOperationException("The task has not yet completed.");
             }
         }
 

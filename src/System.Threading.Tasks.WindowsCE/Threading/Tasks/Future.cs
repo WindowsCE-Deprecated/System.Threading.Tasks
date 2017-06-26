@@ -1,4 +1,10 @@
-﻿namespace System.Threading.Tasks
+﻿#if NET35_CF
+using InternalOCE = System.OperationCanceledException;
+#else
+using InternalOCE = Mock.System.OperationCanceledException;
+#endif
+
+namespace System.Threading.Tasks
 {
     /// <summary>
     /// Represents an asynchronous operation that produces a result at some time in the future.
@@ -29,6 +35,9 @@
 
                 if (m_exceptions.Count > 0)
                     throw this.Exception;
+
+                if (m_cancellationToken.IsCancellationRequested)
+                    throw new AggregateException(new TaskCanceledException(this));
 
                 return _result;
             }
@@ -73,9 +82,12 @@
         /// The <paramref name="function"/> argument is null.
         /// </exception>
         public Task(Func<TResult> function)
-            : base(function, null, null)
-        {
-        }
+            : base(function, null, default(CancellationToken), null)
+        { }
+
+        public Task(Func<TResult> function, CancellationToken cancellationToken)
+            : base(function, null, cancellationToken, null)
+        { }
 
         /// <summary>
         /// Initializes a new <see cref="Task{TResult}"/> with the specified function and state.
@@ -89,17 +101,19 @@
         /// The <paramref name="function"/> argument is null.
         /// </exception>
         public Task(Func<object, TResult> function, object state)
-            : base(function, state, null)
-        {
-        }
+            : base(function, state, default(CancellationToken), null)
+        { }
+
+        public Task(Func<object, TResult> function, object state, CancellationToken cancellationToken)
+            : base(function, state, cancellationToken, null)
+        { }
 
         /// <summary>
         /// Internal constructor to allow creation of continue tasks.
         /// </summary>
         internal Task(Delegate function, object state, Task continueSource)
-            : base(function, state, continueSource)
-        {
-        }
+            : base(function, state, default(CancellationToken), continueSource)
+        { }
 
         #endregion
 

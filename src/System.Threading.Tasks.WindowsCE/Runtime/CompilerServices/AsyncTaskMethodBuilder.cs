@@ -1,5 +1,11 @@
 ﻿using System.Threading.Tasks;
 
+#if NET35_CF
+using InternalOCE = System.OperationCanceledException;
+#else
+using InternalOCE = Mock.System.OperationCanceledException;
+#endif
+
 namespace System.Runtime.CompilerServices
 {
     public struct AsyncTaskMethodBuilder
@@ -7,7 +13,8 @@ namespace System.Runtime.CompilerServices
         static readonly Task completedTask = new Task((Exception)null);
         Task _task;
 
-        public Task Task {
+        public Task Task
+        {
             get
             {
                 Task task = _task;
@@ -74,7 +81,14 @@ namespace System.Runtime.CompilerServices
                 return;
             }
 
-            if (!task.TrySetException(exception))
+            var cancelException = exception as InternalOCE;
+            bool setException;
+            if (cancelException != null)
+                setException = task.TrySetCanceled(cancelException.CancellationToken);
+            else
+                setException = task.TrySetException(exception);
+
+            if (!setException)
                 throw new InvalidOperationException("Task is already completed");
         }
     }
