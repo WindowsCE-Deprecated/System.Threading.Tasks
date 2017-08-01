@@ -4,6 +4,9 @@ namespace System.Threading.Tasks
 {
     public class TaskCompletionSource<TResult>
     {
+        private const string AlreadyCompletedMessage
+            = "An attempt was made to transition a task to a final state when it had already completed";
+
         private readonly Task<TResult> _task;
 
         public Task<TResult> Task
@@ -17,6 +20,45 @@ namespace System.Threading.Tasks
         public TaskCompletionSource(object state)
         {
             _task = new Task<TResult>(state);
+        }
+
+        public void SetException(Exception exception)
+        {
+            if (exception == null)
+                throw new ArgumentNullException(nameof(exception));
+
+            if (_task.TrySetException(exception))
+                return;
+
+            throw new InvalidOperationException(AlreadyCompletedMessage);
+        }
+
+        public void SetException(IEnumerable<Exception> exceptions)
+        {
+            if (exceptions == null)
+                throw new ArgumentNullException(nameof(exceptions));
+
+            AggregateException agg = new AggregateException(exceptions);
+            if (_task.TrySetException(agg))
+                return;
+
+            throw new InvalidOperationException(AlreadyCompletedMessage);
+        }
+
+        public void SetResult(TResult result)
+        {
+            if (_task.TrySetResult(result))
+                return;
+
+            throw new InvalidOperationException(AlreadyCompletedMessage);
+        }
+
+        public void SetCanceled()
+        {
+            if (_task.TrySetCanceled(default(CancellationToken)))
+                return;
+
+            throw new InvalidOperationException(AlreadyCompletedMessage);
         }
 
         public bool TrySetException(Exception exception)
@@ -36,42 +78,13 @@ namespace System.Threading.Tasks
             return _task.TrySetException(agg);
         }
 
-        public void SetException(Exception exception)
-        {
-            if (exception == null)
-                throw new ArgumentNullException(nameof(exception));
-
-            if (_task.TrySetException(exception))
-                return;
-
-            throw new InvalidOperationException("An attempt was made to transition a task to a final state when it had already completed");
-        }
-
-        public void SetException(IEnumerable<Exception> exceptions)
-        {
-            if (exceptions == null)
-                throw new ArgumentNullException(nameof(exceptions));
-
-            AggregateException agg = new AggregateException(exceptions);
-            if (_task.TrySetException(agg))
-                return;
-
-            throw new InvalidOperationException("An attempt was made to transition a task to a final state when it had already completed");
-        }
-
         public bool TrySetResult(TResult result)
-        {
-            return _task.TrySetResult(result);
-        }
+            => _task.TrySetResult(result);
 
-        public void SetResult(TResult result)
-        {
-            if (_task.TrySetResult(result))
-                return;
+        public bool TrySetCanceled()
+            => TrySetCanceled(default(CancellationToken));
 
-            throw new InvalidOperationException("An attempt was made to transition a task to a final state when it had already completed");
-        }
-
-        // TODO: Cancel support
+        public bool TrySetCanceled(CancellationToken cancellationToken)
+            => _task.TrySetCanceled(cancellationToken);
     }
 }
