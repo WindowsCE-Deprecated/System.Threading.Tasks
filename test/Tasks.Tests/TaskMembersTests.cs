@@ -357,5 +357,51 @@ namespace Tests
             Assert.AreEqual(NestingCount + 1, counter);
             Assert.IsNull(task.Exception);
         }
+
+        [TestMethod]
+        public void TaskDeepNesting_Delayed()
+        {
+            int counter = 0;
+            Action action = () => Interlocked.Increment(ref counter);
+            var firstTask = new Task(action);
+            var task = firstTask;
+
+            Action<Task> continueAction = t => Interlocked.Increment(ref counter);
+            for (int i = 0; i < NestingCount; i++)
+            {
+                task = task.ContinueWith(continueAction);
+            }
+
+            Assert.AreEqual(TaskStatus.Created, firstTask.Status);
+            firstTask.Start();
+
+            Assert.IsNotNull(task);
+            task.Wait();
+            Assert.AreEqual(NestingCount + 1, counter);
+            Assert.IsNull(task.Exception);
+        }
+
+        [TestMethod]
+        public void TaskDeepNesting_Multicast()
+        {
+            int counter = 0;
+            Action action = () => Interlocked.Increment(ref counter);
+            var firstTask = new Task(action);
+            var task = firstTask;
+
+            Action<Task> continueAction = t => Interlocked.Increment(ref counter);
+            for (int i = 0; i < NestingCount; i++)
+            {
+                task = firstTask.ContinueWith(continueAction);
+            }
+
+            Assert.AreEqual(TaskStatus.Created, firstTask.Status);
+            firstTask.Start();
+
+            Assert.IsNotNull(task);
+            task.Wait();
+            Assert.AreEqual(NestingCount + 1, counter);
+            Assert.IsNull(task.Exception);
+        }
     }
 }

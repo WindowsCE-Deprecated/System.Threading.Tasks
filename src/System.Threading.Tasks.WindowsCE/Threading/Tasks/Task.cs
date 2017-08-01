@@ -428,7 +428,10 @@ namespace System.Threading.Tasks
 
             // Execute wait callback if any
             lock (_lockObj)
+            {
                 _completedCallback?.Invoke();
+                _completedCallback = null;
+            }
         }
 
         #endregion
@@ -462,12 +465,27 @@ namespace System.Threading.Tasks
             }
             else
             {
-                AsyncCallback internalCallback = ar =>
+                m_continueSource.EnqueueContinuation(() => TaskStartAction(null));
+            }
+        }
+
+        private void EnqueueContinuation(Action callback)
+        {
+            bool isTaskCompleted = false;
+            lock (_lockObj)
+            {
+                isTaskCompleted = IsCompletedMethod(_stateFlags);
+                if (!isTaskCompleted)
                 {
-                    m_continueSource.InternalEndWait(ar);
-                    TaskStartAction(ar.AsyncState);
-                };
-                m_continueSource.BeginWait(false, internalCallback, null);
+                    // Enqueue to execute when Task is finalizing
+                    _completedCallback += callback;
+                }
+            }
+
+            if (isTaskCompleted)
+            {
+                // Invoke callback synchronously
+                callback();
             }
         }
 
