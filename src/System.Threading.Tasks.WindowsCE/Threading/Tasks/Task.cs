@@ -21,12 +21,6 @@ namespace System.Threading.Tasks
         private static int _taskIdCounter;  // static counter used to generate unique task IDs
 
         /// <summary>
-        /// The body of the task. Might be <see cref="Action"/>,
-        /// <see cref="Action{T}"/>, <see cref="Func{TResult}"/> or
-        /// <see cref="Func{T, TResult}"/>.
-        /// </summary>
-        protected readonly Delegate m_action;
-        /// <summary>
         /// A state object that can be optionally supplied, passed to action.
         /// </summary>
         protected readonly object m_stateObject;
@@ -35,25 +29,12 @@ namespace System.Threading.Tasks
         private readonly object _lockObj = new object();
 
         protected CancellationToken m_cancellationToken;
-        private CancellationTokenRegistration m_cancelRegistration;
         /// <summary>
         /// A set of exceptions occurred when trying to execute current task.
         /// </summary>
         protected readonly List<Exception> m_exceptions = new List<Exception>();
-        /// <summary>
-        /// A thread-safe event which notifies that current task is completed its execution.
-        /// </summary>
-        protected readonly ManualResetEvent m_taskCompletedEvent;
-        private bool _runSync;
         // this task's unique ID. initialized only if it is ever requested
         private int _taskId;
-
-
-        /// <summary>
-        /// The source which current task continues
-        /// </summary>
-        protected readonly Task m_continueSource;
-
 
         private volatile int _stateFlags;
 
@@ -243,7 +224,9 @@ namespace System.Threading.Tasks
             m_taskCompletedEvent = new ManualResetEvent(true);
 
             if (ex == null)
+            {
                 _stateFlags = TASK_STATE_RAN_TO_COMPLETION;
+            }
             else if (ex is InternalOCE)
             {
                 _stateFlags = TASK_STATE_CANCELED;
@@ -272,7 +255,6 @@ namespace System.Threading.Tasks
             m_action = action;
             m_stateObject = state;
             m_taskCompletedEvent = new ManualResetEvent(false);
-            m_continueSource = continueSource;
 
             m_cancellationToken = cancellationToken;
             if (cancellationToken.CanBeCanceled)
@@ -283,6 +265,9 @@ namespace System.Threading.Tasks
                     task.TrySetCanceled(task.m_cancellationToken);
                 }, this, false);
             }
+
+            if (continueSource != null)
+                StartContinuation(continueSource);
         }
 
         /// <summary>
@@ -313,14 +298,6 @@ namespace System.Threading.Tasks
         public Task(Action<object> action, object state, CancellationToken cancellationToken)
             : this(action, state, cancellationToken, null)
         { }
-
-        /// <summary>
-        /// Destructor to enforces disposal of unmanaged resources.
-        /// </summary>
-        ~Task()
-        {
-            Dispose(false);
-        }
 
         #endregion
 
@@ -455,18 +432,18 @@ namespace System.Threading.Tasks
         public void Start()
         {
             EnsureStartOnce();
-            _runSync = false;
-
             AtomicStateUpdate(TASK_STATE_WAITINGFORACTIVATION, TASK_STATE_COMPLETED_MASK);
-            if (m_continueSource == null)
-            {
-                if (!ThreadPool.QueueUserWorkItem(TaskStartAction))
-                    throw new NotSupportedException("Could not enqueue task for execution");
-            }
-            else
-            {
-                m_continueSource.EnqueueContinuation(() => TaskStartAction(null));
-            }
+
+            if (!ThreadPool.QueueUserWorkItem(TaskStartAction))
+                throw new NotSupportedException("Could not enqueue task for execution");
+        }
+
+        private void StartContinuation(Task source)
+        {
+            EnsureStartOnce();
+            AtomicStateUpdate(TASK_STATE_WAITINGFORACTIVATION, TASK_STATE_COMPLETED_MASK);
+
+            source.EnqueueContinuation(() => TaskStartAction(null));
         }
 
         private void EnqueueContinuation(Action callback)
@@ -573,7 +550,6 @@ namespace System.Threading.Tasks
         {
             EnsureStartOnce();
 
-            _runSync = true;
             TaskStartAction(null);
         }
 
@@ -991,7 +967,6 @@ namespace System.Threading.Tasks
             m_cancelRegistration.Dispose();
 
             AtomicStateUpdate(TASK_STATE_DISPOSED, 0);
-            GC.SuppressFinalize(this);
         }
 
         #endregion
@@ -1037,7 +1012,7 @@ namespace System.Threading.Tasks
         /// <value>true if the asynchronous operation completed synchronously; otherwise, false.</value>
         bool IAsyncResult.CompletedSynchronously
         {
-            get { return _runSync; }
+            get { return false; }
         }
 
         #endregion
@@ -1894,6 +1869,27 @@ namespace System.Threading.Tasks
             });
             resultTask.Start();
             return resultTask;
+        }
+
+        #endregion
+
+        #region Contingency
+
+        private sealed class ContingentProperties
+        {
+            /// <summary>
+            /// The body of the task. Might be <see cref="Action"/>,
+            /// <see cref="Action{T}"/>, <see cref="Func{TResult}"/> or
+            /// <see cref="Func{T, TResult}"/>.
+            /// </summary>
+            public readonly Delegate m_action;
+
+            /// <summary>
+            /// A thread-safe event which notifies that current task is completed its execution.
+            /// </summary>
+            public readonly ManualResetEvent m_taskCompletedEvent;
+
+            public CancellationTokenRegistration m_cancelRegistration;
         }
 
         #endregion
