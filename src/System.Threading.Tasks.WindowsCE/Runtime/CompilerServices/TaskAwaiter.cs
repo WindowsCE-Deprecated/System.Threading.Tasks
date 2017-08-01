@@ -9,7 +9,7 @@ using Mock.System.Runtime.ExceptionServices;
 
 namespace System.Runtime.CompilerServices
 {
-    public struct TaskAwaiter : IAwaiter, INotifyCompletion
+    public struct TaskAwaiter : INotifyCompletion
     {
         readonly Task _task;
 

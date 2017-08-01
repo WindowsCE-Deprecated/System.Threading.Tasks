@@ -2,7 +2,7 @@
 
 namespace System.Runtime.CompilerServices
 {
-    public struct ConfiguredTaskAwaitable<TResult> : IAwaitable<TResult>
+    public struct ConfiguredTaskAwaitable<TResult>
     {
         readonly ConfiguredTaskAwaiter _awaiter;
 
@@ -11,10 +11,10 @@ namespace System.Runtime.CompilerServices
             _awaiter = new ConfiguredTaskAwaiter(task, continueOnCapturedContext);
         }
 
-        public IAwaiter<TResult> GetAwaiter()
+        public ConfiguredTaskAwaiter GetAwaiter()
             => _awaiter;
 
-        public struct ConfiguredTaskAwaiter : IAwaiter<TResult>, INotifyCompletion
+        public struct ConfiguredTaskAwaiter : INotifyCompletion
         {
             private readonly Task<TResult> _task;
             private readonly bool _continueOnCapturedContext;

@@ -14,7 +14,7 @@ namespace System.Threading.Tasks
     /// <summary>
     /// Represents an asynchronous operation.
     /// </summary>
-    public class Task : IAsyncResult, IDisposable, ITask
+    public class Task : IAsyncResult, IDisposable
     {
         private static Task _completedTask; // A task that's already been completed successfully.
         private static readonly TaskFactory _defaultFactory = new TaskFactory();
@@ -907,7 +907,7 @@ namespace System.Threading.Tasks
         /// Gets an awaiter to await this <see cref="Task"/>.
         /// </summary>
         /// <returns>A new awaiter instance.</returns>
-        public Runtime.CompilerServices.IAwaiter GetAwaiter()
+        public Runtime.CompilerServices.TaskAwaiter GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter(this);
         }
@@ -920,7 +920,7 @@ namespace System.Threading.Tasks
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public IAwaitable ConfigureAwait(bool continueOnCapturedContext)
+        public Runtime.CompilerServices.ConfiguredTaskAwaitable ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable(
                 this, continueOnCapturedContext);
@@ -934,7 +934,7 @@ namespace System.Threading.Tasks
         /// time of the await. If the current SynchronizationContext is non-null, that is treated as the current context.
         /// Otherwise, TaskScheduler.Current is treated as the current context.
         /// </returns>
-        public static IAwaitable Yield()
+        public static Runtime.CompilerServices.YieldAwaitable Yield()
         {
             return new Runtime.CompilerServices.YieldAwaitable();
         }

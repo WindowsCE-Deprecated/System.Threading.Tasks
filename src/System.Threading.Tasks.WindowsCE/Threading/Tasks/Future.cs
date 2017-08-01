@@ -12,7 +12,7 @@ namespace System.Threading.Tasks
     /// <typeparam name="TResult">
     /// The type of the result produced by this <see cref="Task{TResult}"/>.
     /// </typeparam>
-    public class Task<TResult> : Task, ITask<TResult>
+    public class Task<TResult> : Task
     {
         private TResult _result;
 
@@ -168,7 +168,7 @@ namespace System.Threading.Tasks
         /// Creates an awaiter used to await this <see cref="Task{TResult}"/>.
         /// </summary>
         /// <returns>An awaiter instance.</returns>
-        public new Runtime.CompilerServices.IAwaiter<TResult> GetAwaiter()
+        public new Runtime.CompilerServices.TaskAwaiter<TResult> GetAwaiter()
         {
             return new Runtime.CompilerServices.TaskAwaiter<TResult>(this);
         }
@@ -181,7 +181,7 @@ namespace System.Threading.Tasks
         /// context captured; otherwise, false.
         /// </param>
         /// <returns>A new awaiter instance.</returns>
-        public new IAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
+        public new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
         {
             return new Runtime.CompilerServices.ConfiguredTaskAwaitable<TResult>(
                 this, continueOnCapturedContext);

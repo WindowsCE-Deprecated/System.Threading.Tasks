@@ -9,19 +9,19 @@ namespace System.Runtime.CompilerServices
     /// <summary>
     /// Provides an awaitable context for switching into a target environment.
     /// </summary>
-    public struct YieldAwaitable : IAwaitable
+    public struct YieldAwaitable
     {
         /// <summary>
         /// Gets an awaiter for this <see cref="YieldAwaitable"/>.
         /// </summary>
         /// <returns>An awaiter for this awaitable.</returns>
-        public IAwaiter GetAwaiter()
+        public YieldAwaiter GetAwaiter()
             => new YieldAwaiter();
 
         /// <summary>
         /// Provides an awaiter that switches into a target environment.
         /// </summary>
-        public struct YieldAwaiter : IAwaiter, INotifyCompletion
+        public struct YieldAwaiter : INotifyCompletion
         {
             private static readonly WaitCallback _waitCallbackRunAction = RunAction;
             private static readonly SendOrPostCallback _waitSendOrPostCallbackRunAction = RunAction;
