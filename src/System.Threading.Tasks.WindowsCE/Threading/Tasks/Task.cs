@@ -25,18 +25,20 @@ namespace System.Threading.Tasks
         /// </summary>
         protected readonly object m_stateObject;
 
-        private Action _completedCallback;
-        private readonly object _lockObj = new object();
-
-        protected CancellationToken m_cancellationToken;
         /// <summary>
         /// A set of exceptions occurred when trying to execute current task.
         /// </summary>
         protected readonly List<Exception> m_exceptions = new List<Exception>();
+
+        protected CancellationToken m_cancellationToken;
+        protected ContingentProperties m_contingentProperties;
         // this task's unique ID. initialized only if it is ever requested
         private int _taskId;
-
+        // Unified flags for Task
         private volatile int _stateFlags;
+
+        private Action<object> _completedCallback;
+        private readonly object _lockObj = new object();
 
         // State constants for _stateFlags;
         // The bits of _stateFlags are allocated as follows:
@@ -59,11 +61,29 @@ namespace System.Threading.Tasks
         // A mask for all of the final states a task may be in
         private const int TASK_STATE_COMPLETED_MASK = TASK_STATE_CANCELED | TASK_STATE_FAULTED | TASK_STATE_RAN_TO_COMPLETION;
 
-
         #region Properties
 
         internal CancellationToken CancellationToken
             => m_cancellationToken;
+
+        private ManualResetEvent CompletedEvent
+        {
+            get
+            {
+                var contingentProperties = EnsureContigentPropertiesInitialized();
+                if (contingentProperties.m_taskCompletedEvent == null)
+                {
+                    bool isCompleted = IsCompleted;
+                    ManualResetEvent mre = new ManualResetEvent(isCompleted);
+                    if (Interlocked.CompareExchange(ref contingentProperties.m_taskCompletedEvent, mre, null) != null)
+                        mre.Close();
+                    else if (!isCompleted && IsCompleted)
+                        mre.Set();
+                }
+
+                return contingentProperties.m_taskCompletedEvent;
+            }
+        }
 
         /// <summary>
         /// Gets a task that's already been completed successfully.
@@ -202,7 +222,6 @@ namespace System.Threading.Tasks
         internal Task()
         {
             _stateFlags = 0;
-            m_taskCompletedEvent = new ManualResetEvent(false);
         }
 
         /// <summary>
@@ -213,7 +232,6 @@ namespace System.Threading.Tasks
         {
             _stateFlags = 0;
             m_stateObject = state;
-            m_taskCompletedEvent = new ManualResetEvent(false);
         }
 
         /// <summary>
@@ -221,8 +239,6 @@ namespace System.Threading.Tasks
         /// </summary>
         internal Task(Exception ex)
         {
-            m_taskCompletedEvent = new ManualResetEvent(true);
-
             if (ex == null)
             {
                 _stateFlags = TASK_STATE_RAN_TO_COMPLETION;
@@ -252,20 +268,20 @@ namespace System.Threading.Tasks
                 throw new ArgumentNullException(nameof(action));
 
             _stateFlags = 0;
-            m_action = action;
+            m_contingentProperties = new ContingentProperties(action, continueSource);
             m_stateObject = state;
-            m_taskCompletedEvent = new ManualResetEvent(false);
 
             m_cancellationToken = cancellationToken;
             if (cancellationToken.CanBeCanceled)
             {
-                m_cancelRegistration = cancellationToken.Register(s =>
+                m_contingentProperties.m_cancelRegistration = cancellationToken.Register(s =>
                 {
                     Task task = s as Task;
                     task.TrySetCanceled(task.m_cancellationToken);
                 }, this, false);
             }
 
+            // Auto-start continuation tasks
             if (continueSource != null)
                 StartContinuation(continueSource);
         }
@@ -318,6 +334,18 @@ namespace System.Threading.Tasks
                 }
                 sw.SpinOnce();
             } while (true);
+        }
+
+        private ContingentProperties EnsureContigentPropertiesInitialized()
+        {
+            if (m_contingentProperties == null)
+            {
+                var cp = new ContingentProperties(null, null);
+                if (Interlocked.CompareExchange(ref m_contingentProperties, cp, null) != null)
+                    cp = null;
+            }
+
+            return m_contingentProperties;
         }
 
         // Atomically mark a Task as started while making sure that it is not canceled.
@@ -401,12 +429,13 @@ namespace System.Threading.Tasks
         // Send signal to completed event handler and execute callback
         private void SendCompletedSignal()
         {
-            m_taskCompletedEvent.Set();
+            // TODO: Avoid initialization race
+            m_contingentProperties?.m_taskCompletedEvent?.Set();
 
             // Execute wait callback if any
             lock (_lockObj)
             {
-                _completedCallback?.Invoke();
+                _completedCallback?.Invoke(null);
                 _completedCallback = null;
             }
         }
@@ -443,10 +472,14 @@ namespace System.Threading.Tasks
             EnsureStartOnce();
             AtomicStateUpdate(TASK_STATE_WAITINGFORACTIVATION, TASK_STATE_COMPLETED_MASK);
 
-            source.EnqueueContinuation(() => TaskStartAction(null));
+            if (source.EnqueueContinuation(TaskStartAction))
+                return;
+
+            if (!ThreadPool.QueueUserWorkItem(TaskStartAction))
+                throw new NotSupportedException("Could not enqueue task for execution");
         }
 
-        private void EnqueueContinuation(Action callback)
+        private bool EnqueueContinuation(Action<object> callback)
         {
             bool isTaskCompleted = false;
             lock (_lockObj)
@@ -456,14 +489,17 @@ namespace System.Threading.Tasks
                 {
                     // Enqueue to execute when Task is finalizing
                     _completedCallback += callback;
+                    return true;
                 }
             }
 
-            if (isTaskCompleted)
-            {
-                // Invoke callback synchronously
-                callback();
-            }
+            return false;
+
+            //if (isTaskCompleted)
+            //{
+            //    // Invoke callback synchronously
+            //    callback();
+            //}
         }
 
         #endregion
@@ -510,25 +546,31 @@ namespace System.Threading.Tasks
         /// </summary>
         protected virtual void ExecuteTaskAction()
         {
-            if (m_action is Action)
+            var cp = m_contingentProperties;
+            if (cp == null)
+                throw new InvalidOperationException("Should not try to execute null actions");
+            var uncastAction = cp.m_action;
+            var parent = cp.m_parent;
+
+            if (uncastAction is Action)
             {
-                Action action = (Action)m_action;
+                Action action = (Action)uncastAction;
                 action();
             }
-            else if (m_action is Action<object>)
+            else if (uncastAction is Action<object>)
             {
-                Action<object> action = (Action<object>)m_action;
+                Action<object> action = (Action<object>)uncastAction;
                 action(m_stateObject);
             }
-            else if (m_action is Action<Task>)
+            else if (uncastAction is Action<Task>)
             {
-                Action<Task> action = (Action<Task>)m_action;
-                action(m_continueSource);
+                Action<Task> action = (Action<Task>)uncastAction;
+                action(parent);
             }
-            else if (m_action is Action<Task, object>)
+            else if (uncastAction is Action<Task, object>)
             {
-                Action<Task, object> action = (Action<Task, object>)m_action;
-                action(m_continueSource, m_stateObject);
+                Action<Task, object> action = (Action<Task, object>)uncastAction;
+                action(parent, m_stateObject);
             }
             else
             {
@@ -557,6 +599,14 @@ namespace System.Threading.Tasks
 
         #region Wait methods
 
+        private ManualResetEvent GetWaitHandleIfNotCompleted()
+        {
+            if (IsCompleted)
+                return null;
+
+            return CompletedEvent;
+        }
+
         /// <summary>
         /// Waits for the <see cref="Task"/> to complete execution.
         /// </summary>
@@ -565,7 +615,7 @@ namespace System.Threading.Tasks
         /// </exception>
         public void Wait()
         {
-            m_taskCompletedEvent.WaitOne();
+            GetWaitHandleIfNotCompleted()?.WaitOne();
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
@@ -603,7 +653,7 @@ namespace System.Threading.Tasks
                 throw new ArgumentOutOfRangeException("timeout");
             }
 
-            var success = m_taskCompletedEvent.WaitOne((int)totalMilliseconds, false);
+            bool success = GetWaitHandleIfNotCompleted()?.WaitOne((int)totalMilliseconds, false) ?? true;
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
@@ -641,7 +691,7 @@ namespace System.Threading.Tasks
                 throw new ArgumentOutOfRangeException("millisecondsTimeout");
             }
 
-            var success = m_taskCompletedEvent.WaitOne(millisecondsTimeout, false);
+            bool success = GetWaitHandleIfNotCompleted()?.WaitOne(millisecondsTimeout, false) ?? true;
 
             if (m_exceptions.Count > 0)
                 ExceptionDispatchInfo.Capture(this.Exception).Throw();
@@ -680,11 +730,11 @@ namespace System.Threading.Tasks
                 syncContext = SynchronizationContext.Current;
 
             var ar = new WaitAsyncResult(stateObject);
-            Action waitCallback = () =>
+            Action<object> waitCallback = _ =>
             {
                 // Always true because lacks timeout
                 ar.Result = true;
-                ar.EventHandler.Set();
+                ar.TrySetCompleted();
 
                 if (callback != null)
                 {
@@ -698,7 +748,7 @@ namespace System.Threading.Tasks
             bool isTaskCompleted = false;
             lock (_lockObj)
             {
-                isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
+                isTaskCompleted = IsCompleted;
                 if (!isTaskCompleted)
                 {
                     // Enqueue to execute when Task is finalizing
@@ -709,7 +759,7 @@ namespace System.Threading.Tasks
             if (isTaskCompleted)
             {
                 // Execute callback synchronously
-                waitCallback();
+                waitCallback(null);
             }
 
             return ar;
@@ -810,12 +860,12 @@ namespace System.Threading.Tasks
                 bool needWaitSignal = (bool)state;
                 int adjTimeout = millisecondsTimeout - (int)timeTracker.ElapsedMilliseconds;
                 if (needWaitSignal && adjTimeout > 0)
-                    ar.Result = m_taskCompletedEvent.WaitOne(adjTimeout, false);
+                    ar.Result = GetWaitHandleIfNotCompleted()?.WaitOne(adjTimeout, false) ?? true;
                 else
                     ar.Result = true;
 
                 timeTracker = null;
-                ar.EventHandler.Set();
+                ar.TrySetCompleted();
 
                 if (callback != null)
                 {
@@ -829,7 +879,7 @@ namespace System.Threading.Tasks
             bool isTaskCompleted = false;
             lock (_lockObj)
             {
-                isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
+                isTaskCompleted = IsCompleted;
                 if (!isTaskCompleted)
                 {
                     // Enqueue callback for further execution
@@ -886,8 +936,11 @@ namespace System.Threading.Tasks
         private bool InternalEndWait(IAsyncResult asyncResult)
         {
             var waitHandle = (WaitAsyncResult)asyncResult;
-            if (!waitHandle.EventHandler.WaitOne())
-                throw new InvalidOperationException("Error waiting for wait handle signal");
+            if (!waitHandle.IsCompleted)
+            {
+                if (!waitHandle.AsyncWaitHandle.WaitOne())
+                    throw new InvalidOperationException("Error waiting for completed event");
+            }
             waitHandle.Dispose();
 
             return waitHandle.Result;
@@ -942,30 +995,13 @@ namespace System.Threading.Tasks
         /// </summary>
         public virtual void Dispose()
         {
-            Dispose(true);
-        }
-
-        /// <summary>
-        /// Disposes the <see cref="Task"/>, releasing all of its unmanaged resources.
-        /// </summary>
-        /// <param name="disposing">
-        /// A Boolean value that indicates whether this method is being called
-        /// due to a call to <see cref="Dispose()"/>.
-        /// </param>
-        private void Dispose(bool disposing)
-        {
-            if (disposing)
+            if ((_stateFlags & TASK_STATE_COMPLETED_MASK) == 0)
             {
-                if ((_stateFlags & TASK_STATE_COMPLETED_MASK) == 0)
-                {
-                    throw new InvalidOperationException(
-                        "A task may only be disposed if it has completed its execution");
-                }
+                throw new InvalidOperationException(
+                    "A task may only be disposed if it has completed its execution");
             }
 
-            m_taskCompletedEvent?.Close();
-            m_cancelRegistration.Dispose();
-
+            m_contingentProperties?.Dispose();
             AtomicStateUpdate(TASK_STATE_DISPOSED, 0);
         }
 
@@ -1002,7 +1038,7 @@ namespace System.Threading.Tasks
                 if (isDisposed)
                     throw new ObjectDisposedException("Task");
 
-                return m_taskCompletedEvent;
+                return CompletedEvent;
             }
         }
 
@@ -1021,12 +1057,14 @@ namespace System.Threading.Tasks
 
         private class WaitAsyncResult : IAsyncResult, IDisposable
         {
-            private readonly ManualResetEvent _doneEvent;
+            private ManualResetEvent _doneEvent;
+            private int _isCompleted;
             private readonly object _stateObject;
 
             public WaitAsyncResult(object stateObject)
             {
-                _doneEvent = new ManualResetEvent(false);
+                _doneEvent = null;
+                _isCompleted = 0;
                 _stateObject = stateObject;
             }
 
@@ -1037,27 +1075,48 @@ namespace System.Threading.Tasks
 
             public WaitHandle AsyncWaitHandle
             {
-                get { return _doneEvent; }
+                get
+                {
+                    if (_doneEvent == null)
+                    {
+                        bool isCompleted = _isCompleted > 0;
+                        var mre = new ManualResetEvent(isCompleted);
+                        if (Interlocked.CompareExchange(ref _doneEvent, mre, null) != null)
+                            mre.Close();
+                        else if (!isCompleted && _isCompleted > 0)
+                            mre.Set();
+
+                        mre = null;
+                    }
+
+                    return _doneEvent;
+                }
             }
 
-            public bool CompletedSynchronously { get; set; }
-
-            public ManualResetEvent EventHandler
-            {
-                get { return _doneEvent; }
-            }
+            public bool CompletedSynchronously
+                => false;
 
             public bool IsCompleted
             {
-                get { return _doneEvent.WaitOne(0, false); }
+                get { return _isCompleted > 0; }
             }
 
             public bool Result { get; set; }
 
             public void Dispose()
             {
-                if (_doneEvent != null)
-                    _doneEvent.Close();
+                _doneEvent?.Close();
+            }
+
+            public bool TrySetCompleted()
+            {
+                // Overflow is ignored (should not be set too much)
+                if (Interlocked.Increment(ref _isCompleted) > 1)
+                    return false;
+
+                var mre = _doneEvent;
+                mre?.Set();
+                return true;
             }
         }
 
@@ -1071,9 +1130,7 @@ namespace System.Threading.Tasks
             if (continuationAction == null)
                 throw new ArgumentNullException("continuationAction");
 
-            var continueTask = new Task(continuationAction, state, default(CancellationToken), this);
-            continueTask.Start();
-            return continueTask;
+            return new Task(continuationAction, state, default(CancellationToken), this);
         }
 
         /// <summary>
@@ -1125,9 +1182,7 @@ namespace System.Threading.Tasks
             if (continuationFunction == null)
                 throw new ArgumentNullException("continuationFunction");
 
-            var continueTask = new Task<TResult>(continuationFunction, state, this);
-            continueTask.Start();
-            return continueTask;
+            return new Task<TResult>(continuationFunction, state, this);
         }
 
         /// <summary>
@@ -1875,7 +1930,7 @@ namespace System.Threading.Tasks
 
         #region Contingency
 
-        private sealed class ContingentProperties
+        protected sealed class ContingentProperties : IDisposable
         {
             /// <summary>
             /// The body of the task. Might be <see cref="Action"/>,
@@ -1887,9 +1942,23 @@ namespace System.Threading.Tasks
             /// <summary>
             /// A thread-safe event which notifies that current task is completed its execution.
             /// </summary>
-            public readonly ManualResetEvent m_taskCompletedEvent;
+            public ManualResetEvent m_taskCompletedEvent;
 
             public CancellationTokenRegistration m_cancelRegistration;
+
+            public readonly Task m_parent;
+
+            public ContingentProperties(Delegate action, Task parent)
+            {
+                m_action = action;
+                m_parent = parent;
+            }
+
+            public void Dispose()
+            {
+                m_taskCompletedEvent?.Close();
+                m_cancelRegistration.Dispose();
+            }
         }
 
         #endregion

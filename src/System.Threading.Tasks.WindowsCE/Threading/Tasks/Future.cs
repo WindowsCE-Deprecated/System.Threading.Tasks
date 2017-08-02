@@ -31,14 +31,7 @@ namespace System.Threading.Tasks
         {
             get
             {
-                m_taskCompletedEvent.WaitOne();
-
-                if (m_exceptions.Count > 0)
-                    throw this.Exception;
-
-                if (m_cancellationToken.IsCancellationRequested)
-                    throw new AggregateException(new TaskCanceledException(this));
-
+                Wait();
                 return _result;
             }
         }
@@ -134,25 +127,31 @@ namespace System.Threading.Tasks
         /// </summary>
         protected override void ExecuteTaskAction()
         {
-            if (m_action is Func<TResult>)
+            var cp = m_contingentProperties;
+            if (cp == null)
+                throw new InvalidOperationException("Should not try to execute null actions");
+            var uncastAction = cp.m_action;
+            var parent = cp.m_parent;
+
+            if (uncastAction is Func<TResult>)
             {
-                var userWork = (Func<TResult>)m_action;
+                var userWork = (Func<TResult>)uncastAction;
                 _result = userWork();
             }
-            else if (m_action is Func<object, TResult>)
+            else if (uncastAction is Func<object, TResult>)
             {
-                var userWork = (Func<object, TResult>)m_action;
+                var userWork = (Func<object, TResult>)uncastAction;
                 _result = userWork(m_stateObject);
             }
-            else if (m_action is Func<Task, TResult>)
+            else if (uncastAction is Func<Task, TResult>)
             {
-                Func<Task, TResult> userWork = (Func<Task, TResult>)m_action;
-                _result = userWork(m_continueSource);
+                Func<Task, TResult> userWork = (Func<Task, TResult>)uncastAction;
+                _result = userWork(parent);
             }
-            else if (m_action is Func<Task, object, TResult>)
+            else if (uncastAction is Func<Task, object, TResult>)
             {
-                Func<Task, object, TResult> userWork = (Func<Task, object, TResult>)m_action;
-                _result = userWork(m_continueSource, m_stateObject);
+                Func<Task, object, TResult> userWork = (Func<Task, object, TResult>)uncastAction;
+                _result = userWork(parent, m_stateObject);
             }
             else
             {

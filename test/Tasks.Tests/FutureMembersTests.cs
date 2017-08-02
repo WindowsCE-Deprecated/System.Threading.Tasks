@@ -105,7 +105,8 @@ namespace Tests
 
             target = new Task<int>(action);
             target.RunSynchronously();
-            Assert.IsTrue(((IAsyncResult)target).CompletedSynchronously);
+            // Always false
+            Assert.IsFalse(((IAsyncResult)target).CompletedSynchronously);
             Assert.AreEqual(2, counter);
         }
 
