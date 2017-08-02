@@ -87,9 +87,40 @@ namespace Tests
             {
                 Assert.AreEqual(ct, ex.CancellationToken);
             }
+            catch (Exception ex)
+            {
+                Assert.Fail(
+                    "Should throw an operation canceled exception: {0}",
+                    ex.Message);
+            }
             finally
             {
                 tokenSource2.Dispose();
+            }
+
+            Assert.AreEqual(TaskStatus.Canceled, task.Status);
+            Assert.AreEqual(ct, task.CancellationToken);
+        }
+
+        [TestMethod]
+        public void TaskCancellation_CancelBeforeCreate()
+        {
+            var token = new CancellationToken(true);
+            Assert.IsTrue(token.CanBeCanceled);
+
+            using (var t = new Task(() => { }, token))
+            {
+                Assert.AreEqual(TaskStatus.Canceled, t.Status, "#1");
+
+                try
+                {
+                    t.Start();
+                    Assert.Fail("#2");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    GC.KeepAlive(ex);
+                }
             }
         }
 
@@ -116,40 +147,41 @@ namespace Tests
             }
         }
 
-        // TODO: Create cancelable continuation Task
-        //[TestMethod]
-        //public void TaskCancellation_CanceledContinuationExecuteSynchronouslyTest()
-        //{
-        //    using (var source = new CancellationTokenSource())
-        //    {
-        //        using (var evt = new ManualResetEvent(false))
-        //        {
-        //            var token = source.Token;
-        //            var result = false;
-        //            var thrown = false;
+        [TestMethod]
+        public void TaskCancellation_CanceledContinuationExecuteSynchronouslyTest()
+        {
+            using (var source = new CancellationTokenSource())
+            {
+                using (var evt = new ManualResetEvent(false))
+                {
+                    var token = source.Token;
+                    var result = false;
+                    var thrown = false;
 
-        //            var task = Task.Factory.StartNew(() => evt.WaitOne(100));
-        //            var cont = task.ContinueWith(t => result = true, token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    var task = Task.Factory.StartNew(() => evt.WaitOne(100));
+                    // TODO: Create TaskContinuationOptions
+                    //var cont = task.ContinueWith(t => result = true, token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    var cont = task.ContinueWith(t => result = true, token);
 
-        //            source.Cancel();
-        //            evt.Set();
-        //            task.Wait(100);
-        //            try
-        //            {
-        //                cont.Wait(100);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                GC.KeepAlive(ex);
-        //                thrown = true;
-        //            }
+                    source.Cancel();
+                    evt.Set();
+                    task.Wait(100);
+                    try
+                    {
+                        cont.Wait(100);
+                    }
+                    catch (Exception ex)
+                    {
+                        GC.KeepAlive(ex);
+                        thrown = true;
+                    }
 
-        //            Assert.IsTrue(task.IsCompleted);
-        //            Assert.IsTrue(cont.IsCanceled);
-        //            Assert.IsFalse(result);
-        //            Assert.IsTrue(thrown);
-        //        }
-        //    }
-        //}
+                    Assert.IsTrue(task.IsCompleted);
+                    Assert.IsTrue(cont.IsCanceled);
+                    Assert.IsFalse(result);
+                    Assert.IsTrue(thrown);
+                }
+            }
+        }
     }
 }

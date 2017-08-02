@@ -267,6 +267,13 @@ namespace System.Threading.Tasks
             if (action == null)
                 throw new ArgumentNullException(nameof(action));
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _stateFlags = TASK_STATE_CANCELED;
+                m_cancellationToken = cancellationToken;
+                return;
+            }
+
             _stateFlags = 0;
             m_contingentProperties = new ContingentProperties(action, continueSource);
             m_stateObject = state;
@@ -408,9 +415,7 @@ namespace System.Threading.Tasks
         protected void EnsureStartOnce()
         {
             if (!MarkStarted())
-            {
-                throw new InvalidOperationException("Trying to start Task more than once");
-            }
+                throw new InvalidOperationException("Cannot start a task that is already completed");
         }
 
         // Similar to IsCompleted property, but allows for the use of a cached flags value
@@ -514,7 +519,8 @@ namespace System.Threading.Tasks
         {
             try
             {
-                AtomicStateUpdate(TASK_STATE_DELEGATE_INVOKED, TASK_STATE_DELEGATE_INVOKED);
+                if (!AtomicStateUpdate(TASK_STATE_DELEGATE_INVOKED, TASK_STATE_DELEGATE_INVOKED | TASK_STATE_COMPLETED_MASK))
+                    return;
 
                 // Execute provided action
                 ExecuteTaskAction();
@@ -1124,13 +1130,13 @@ namespace System.Threading.Tasks
 
         #region Continuation Methods
 
-        private Task InternalContinueWith(Delegate continuationAction, object state)
+        private Task InternalContinueWith(Delegate continuationAction, object state, CancellationToken cancellationToken)
         {
             // Throw on continuation with null action
             if (continuationAction == null)
                 throw new ArgumentNullException("continuationAction");
 
-            return new Task(continuationAction, state, default(CancellationToken), this);
+            return new Task(continuationAction, state, cancellationToken, this);
         }
 
         /// <summary>
@@ -1150,9 +1156,10 @@ namespace System.Threading.Tasks
         /// The <paramref name="continuationAction"/> argument is null.
         /// </exception>
         public Task ContinueWith(Action<Task> continuationAction)
-        {
-            return InternalContinueWith(continuationAction, null);
-        }
+            => InternalContinueWith(continuationAction, null, default(CancellationToken));
+
+        public Task ContinueWith(Action<Task> continuationAction, CancellationToken cancellationToken)
+            => InternalContinueWith(continuationAction, null, cancellationToken);
 
         /// <summary>
         /// Creates a continuation that executes when the target <see cref="Task"/> completes.
@@ -1172,17 +1179,18 @@ namespace System.Threading.Tasks
         /// The <paramref name="continuationAction"/> argument is null.
         /// </exception>
         public Task ContinueWith(Action<Task, object> continuationAction, object state)
-        {
-            return InternalContinueWith(continuationAction, state);
-        }
+            => InternalContinueWith(continuationAction, state, default(CancellationToken));
 
-        private Task<TResult> InternalContinueWith<TResult>(Delegate continuationFunction, object state)
+        public Task ContinueWith(Action<Task, object> continuationAction, object state, CancellationToken cancellationToken)
+            => InternalContinueWith(continuationAction, state, cancellationToken);
+
+        private Task<TResult> InternalContinueWith<TResult>(Delegate continuationFunction, object state, CancellationToken cancellationToken)
         {
             // Throw on continuation with null action
             if (continuationFunction == null)
                 throw new ArgumentNullException("continuationFunction");
 
-            return new Task<TResult>(continuationFunction, state, this);
+            return new Task<TResult>(continuationFunction, state, cancellationToken, this);
         }
 
         /// <summary>
@@ -1205,9 +1213,10 @@ namespace System.Threading.Tasks
         /// The <paramref name="continuationFunction"/> argument is null.
         /// </exception>
         public Task<TResult> ContinueWith<TResult>(Func<Task, TResult> continuationFunction)
-        {
-            return InternalContinueWith<TResult>(continuationFunction, null);
-        }
+            => InternalContinueWith<TResult>(continuationFunction, null, default(CancellationToken));
+
+        public Task<TResult> ContinueWith<TResult>(Func<Task, TResult> continuationFunction, CancellationToken cancellationToken)
+            => InternalContinueWith<TResult>(continuationFunction, null, cancellationToken);
 
         /// <summary>
         /// Creates a continuation that executes when the target <see cref="Task"/> completes.
@@ -1230,9 +1239,10 @@ namespace System.Threading.Tasks
         /// The <paramref name="continuationFunction"/> argument is null.
         /// </exception>
         public Task<TResult> ContinueWith<TResult>(Func<Task, object, TResult> continuationFunction, object state)
-        {
-            return InternalContinueWith<TResult>(continuationFunction, state);
-        }
+            => InternalContinueWith<TResult>(continuationFunction, state, default(CancellationToken));
+
+        public Task<TResult> ContinueWith<TResult>(Func<Task, object, TResult> continuationFunction, object state, CancellationToken cancellationToken)
+            => InternalContinueWith<TResult>(continuationFunction, state, cancellationToken);
 
         #endregion
 

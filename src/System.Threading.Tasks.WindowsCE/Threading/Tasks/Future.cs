@@ -104,8 +104,8 @@ namespace System.Threading.Tasks
         /// <summary>
         /// Internal constructor to allow creation of continue tasks.
         /// </summary>
-        internal Task(Delegate function, object state, Task continueSource)
-            : base(function, state, default(CancellationToken), continueSource)
+        internal Task(Delegate function, object state, CancellationToken cancellationToken, Task continueSource)
+            : base(function, state, cancellationToken, continueSource)
         { }
 
         #endregion
