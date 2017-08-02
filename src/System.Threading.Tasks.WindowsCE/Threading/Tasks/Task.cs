@@ -14,9 +14,12 @@ namespace System.Threading.Tasks
     /// </summary>
     public class Task : IAsyncResult, IDisposable, ITask
     {
-        private static Task _completedTask; // A task that's already been completed successfully.
-        private static readonly TaskFactory _defaultFactory = new TaskFactory();
-        private static int _taskIdCounter;  // static counter used to generate unique task IDs
+        private static readonly LocalDataStoreSlot s_taskSlot
+            = Thread.AllocateDataSlot();
+
+        private static Task s_completedTask; // A task that's already been completed successfully.
+        private static readonly TaskFactory s_defaultFactory = new TaskFactory();
+        private static int s_taskIdCounter;  // static counter used to generate unique task IDs
 
         /// <summary>
         /// The body of the task. Might be <see cref="Action"/>,
@@ -29,8 +32,8 @@ namespace System.Threading.Tasks
         /// </summary>
         protected readonly object m_stateObject;
 
-        private Action _completedCallback;
-        private readonly object _lockObj = new object();
+        private Action m_completedCallback;
+        private readonly object m_lockObj = new object();
 
 
         /// <summary>
@@ -43,7 +46,8 @@ namespace System.Threading.Tasks
         protected readonly ManualResetEvent m_taskCompletedEvent;
         private bool _runSync;
         // this task's unique ID. initialized only if it is ever requested
-        private int _taskId;
+        private int m_taskId;
+        internal TaskScheduler m_taskScheduler; // The task scheduler this task runs under. 
 
 
         /// <summary>
@@ -52,7 +56,7 @@ namespace System.Threading.Tasks
         protected readonly Task m_continueSource;
 
 
-        private volatile int _stateFlags;
+        private volatile int m_stateFlags;
 
         // State constants for _stateFlags;
         // The bits of _stateFlags are allocated as follows:
@@ -67,10 +71,19 @@ namespace System.Threading.Tasks
         internal const int TASK_STATE_STARTED = 0x10000;                                       //bin: 0000 0000 0000 0001 0000 0000 0000 0000
         internal const int TASK_STATE_DELEGATE_INVOKED = 0x20000;                              //bin: 0000 0000 0000 0010 0000 0000 0000 0000
         internal const int TASK_STATE_DISPOSED = 0x40000;                                      //bin: 0000 0000 0000 0100 0000 0000 0000 0000
+        internal const int TASK_STATE_EXCEPTIONOBSERVEDBYPARENT = 0x80000;                     //bin: 0000 0000 0000 1000 0000 0000 0000 0000
+        internal const int TASK_STATE_CANCELLATIONACKNOWLEDGED = 0x100000;                     //bin: 0000 0000 0001 0000 0000 0000 0000 0000
         internal const int TASK_STATE_FAULTED = 0x200000;                                      //bin: 0000 0000 0010 0000 0000 0000 0000 0000
         internal const int TASK_STATE_CANCELED = 0x400000;                                     //bin: 0000 0000 0100 0000 0000 0000 0000 0000
+        internal const int TASK_STATE_WAITING_ON_CHILDREN = 0x800000;                          //bin: 0000 0000 1000 0000 0000 0000 0000 0000
         internal const int TASK_STATE_RAN_TO_COMPLETION = 0x1000000;                           //bin: 0000 0001 0000 0000 0000 0000 0000 0000
         internal const int TASK_STATE_WAITINGFORACTIVATION = 0x2000000;                        //bin: 0000 0010 0000 0000 0000 0000 0000 0000
+        internal const int TASK_STATE_COMPLETION_RESERVED = 0x4000000;                         //bin: 0000 0100 0000 0000 0000 0000 0000 0000
+        internal const int TASK_STATE_THREAD_WAS_ABORTED = 0x8000000;                          //bin: 0000 1000 0000 0000 0000 0000 0000 0000
+        internal const int TASK_STATE_WAIT_COMPLETION_NOTIFICATION = 0x10000000;               //bin: 0001 0000 0000 0000 0000 0000 0000 0000
+        //This could be moved to InternalTaskOptions enum
+        internal const int TASK_STATE_EXECUTIONCONTEXT_IS_NULL = 0x20000000;                   //bin: 0010 0000 0000 0000 0000 0000 0000 0000
+        internal const int TASK_STATE_TASKSCHEDULED_WAS_FIRED = 0x40000000;                    //bin: 0100 0000 0000 0000 0000 0000 0000 0000
 
         // A mask for all of the final states a task may be in
         private const int TASK_STATE_COMPLETED_MASK = TASK_STATE_CANCELED | TASK_STATE_FAULTED | TASK_STATE_RAN_TO_COMPLETION;
@@ -88,9 +101,9 @@ namespace System.Threading.Tasks
         {
             get
             {
-                var completedTask = _completedTask;
+                var completedTask = s_completedTask;
                 if (completedTask == null)
-                    _completedTask = completedTask = new Task((Exception)null); // lazy initialization
+                    s_completedTask = completedTask = new Task((Exception)null); // lazy initialization
                 return completedTask;
             }
         }
@@ -129,14 +142,38 @@ namespace System.Threading.Tasks
         {
             get
             {
-                if (_taskId == 0)
+                if (m_taskId == 0)
                 {
                     int newId = NewId();
-                    Interlocked.CompareExchange(ref _taskId, newId, 0);
+                    Interlocked.CompareExchange(ref m_taskId, newId, 0);
                 }
 
-                return _taskId;
+                return m_taskId;
             }
+        }
+
+        /// <summary>
+        /// Gets the <see cref="Task">Task</see> instance currently executing, or
+        /// null if none exists.
+        /// </summary>
+        internal static Task InternalCurrent
+        {
+            get
+            {
+                object value = Thread.GetData(s_taskSlot);
+                return value as Task;
+            }
+        }
+
+        /// <summary>
+        /// Gets the Task instance currently executing if the specified creation options
+        /// contain AttachedToParent.
+        /// </summary>
+        /// <param name="creationOptions">The options to check.</param>
+        /// <returns>The current task if there is one and if AttachToParent is in the options; otherwise, null.</returns>
+        private static Task InternalCurrentIfAttached(TaskCreationOptions creationOptions)
+        {
+            return (creationOptions & TaskCreationOptions.AttachedToParent) != 0 ? InternalCurrent : null;
         }
 
         /// <summary>
@@ -153,7 +190,7 @@ namespace System.Threading.Tasks
             get
             {
                 // enable inlining of IsCompletedMethod by "cast"ing away the volatility
-                int stateFlags = _stateFlags;
+                int stateFlags = m_stateFlags;
                 return IsCompletedMethod(stateFlags);
             }
         }
@@ -173,7 +210,7 @@ namespace System.Threading.Tasks
         /// <see cref="Task"/> and <see cref="Task{TResult}"/>
         /// instances.
         /// </summary>
-        public static TaskFactory Factory { get { return _defaultFactory; } }
+        public static TaskFactory Factory { get { return s_defaultFactory; } }
 
         /// <summary>
         /// Gets the <see cref="T:System.Threading.Tasks.TaskStatus">TaskStatus</see> of this Task. 
@@ -187,7 +224,7 @@ namespace System.Threading.Tasks
                 // get a cached copy of the state flags.  This should help us
                 // to get a consistent view of the flags if they are changing during the
                 // execution of this method.
-                int sf = _stateFlags;
+                int sf = m_stateFlags;
 
                 if ((sf & TASK_STATE_FAULTED) != 0) rval = TaskStatus.Faulted;
                 else if ((sf & TASK_STATE_CANCELED) != 0) rval = TaskStatus.Canceled;
@@ -211,7 +248,7 @@ namespace System.Threading.Tasks
         /// </summary>
         internal Task()
         {
-            _stateFlags = 0;
+            m_stateFlags = 0;
             m_taskCompletedEvent = new ManualResetEvent(false);
         }
 
@@ -221,7 +258,7 @@ namespace System.Threading.Tasks
         /// <param name="state">An object representing data to be used by the action.</param>
         internal Task(object state)
         {
-            _stateFlags = 0;
+            m_stateFlags = 0;
             m_stateObject = state;
             m_taskCompletedEvent = new ManualResetEvent(false);
         }
@@ -234,10 +271,10 @@ namespace System.Threading.Tasks
             m_taskCompletedEvent = new ManualResetEvent(true);
 
             if (ex == null)
-                _stateFlags = TASK_STATE_RAN_TO_COMPLETION;
+                m_stateFlags = TASK_STATE_RAN_TO_COMPLETION;
             else
             {
-                _stateFlags = TASK_STATE_FAULTED;
+                m_stateFlags = TASK_STATE_FAULTED;
                 m_exceptions.Add(ex);
             }
         }
@@ -255,7 +292,7 @@ namespace System.Threading.Tasks
                 throw new ArgumentNullException("action");
             }
 
-            _stateFlags = 0;
+            m_stateFlags = 0;
             m_action = action;
             m_stateObject = state;
             m_taskCompletedEvent = new ManualResetEvent(false);
@@ -285,6 +322,19 @@ namespace System.Threading.Tasks
         {
         }
 
+        public Task(Action<object> action, object state, CancellationToken cancellationToken, TaskCreationOptions creationOptions)
+            : this(action, state, Task.InternalCurrentIfAttached(creationOptions), cancellationToken, creationOptions, InternalTaskOptions.None, null)
+        { }
+
+        private Task(Delegate action, object state, Task parent, CancellationToken cancellationToken,
+            TaskCreationOptions creationOptions, InternalTaskOptions internalOptions, TaskScheduler scheduler)
+        {
+            if (action == null)
+                throw new ArgumentNullException(nameof(action));
+
+
+        }
+
         /// <summary>
         /// Destructor to enforces disposal of unmanaged resources.
         /// </summary>
@@ -304,9 +354,9 @@ namespace System.Threading.Tasks
             SpinWait sw = new SpinWait();
             do
             {
-                int oldFlags = _stateFlags;
+                int oldFlags = m_stateFlags;
                 if ((oldFlags & illegalBits) != 0) return false;
-                if (Interlocked.CompareExchange(ref _stateFlags, oldFlags | newBits, oldFlags) == oldFlags)
+                if (Interlocked.CompareExchange(ref m_stateFlags, oldFlags | newBits, oldFlags) == oldFlags)
                 {
                     return true;
                 }
@@ -323,7 +373,7 @@ namespace System.Threading.Tasks
         // Atomically mark a Task as completed while making sure that it is not already completed.
         internal bool TrySetCompleted()
         {
-            if (!AtomicStateUpdate(TASK_STATE_STARTED | TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK))
+            if (!AtomicStateUpdate(TASK_STATE_RAN_TO_COMPLETION, TASK_STATE_COMPLETED_MASK))
                 return false;
 
             SendCompletedSignal();
@@ -332,7 +382,7 @@ namespace System.Threading.Tasks
 
         internal bool TrySetException(Exception e)
         {
-            if (!AtomicStateUpdate(TASK_STATE_FAULTED, TASK_STATE_CANCELED | TASK_STATE_RAN_TO_COMPLETION))
+            if (!AtomicStateUpdate(TASK_STATE_FAULTED, TASK_STATE_COMPLETED_MASK))
                 return false;
 
             AggregateException agg = e as AggregateException;
@@ -352,7 +402,7 @@ namespace System.Threading.Tasks
             // Otherwise next time this task's Id is queried it will get a new value
             do
             {
-                newId = Interlocked.Increment(ref _taskIdCounter);
+                newId = Interlocked.Increment(ref s_taskIdCounter);
             }
             while (newId == 0);
             return newId;
@@ -379,7 +429,7 @@ namespace System.Threading.Tasks
         // For use in InternalWait -- marginally faster than (Task.Status == TaskStatus.RanToCompletion)
         internal bool IsRanToCompletion
         {
-            get { return (_stateFlags & TASK_STATE_COMPLETED_MASK) == TASK_STATE_RAN_TO_COMPLETION; }
+            get { return (m_stateFlags & TASK_STATE_COMPLETED_MASK) == TASK_STATE_RAN_TO_COMPLETION; }
         }
 
         // Send signal to completed event handler and execute callback
@@ -388,10 +438,10 @@ namespace System.Threading.Tasks
             m_taskCompletedEvent.Set();
 
             // Execute wait callback if any
-            lock (_lockObj)
+            lock (m_lockObj)
             {
-                if (_completedCallback != null)
-                    _completedCallback();
+                if (m_completedCallback != null)
+                    m_completedCallback();
 
             }
         }
@@ -448,7 +498,7 @@ namespace System.Threading.Tasks
         {
             try
             {
-                AtomicStateUpdate(TASK_STATE_DELEGATE_INVOKED, TASK_STATE_DELEGATE_INVOKED);
+                AtomicStateUpdate(TASK_STATE_DELEGATE_INVOKED, TASK_STATE_DELEGATE_INVOKED | TASK_STATE_COMPLETED_MASK);
 
                 // Execute provided action
                 ExecuteTaskAction();
@@ -653,13 +703,13 @@ namespace System.Threading.Tasks
             };
 
             bool isTaskCompleted = false;
-            lock (_lockObj)
+            lock (m_lockObj)
             {
                 isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
                 if (!isTaskCompleted)
                 {
                     // Enqueue to execute when Task is finalizing
-                    _completedCallback += waitCallback;
+                    m_completedCallback += waitCallback;
                 }
             }
 
@@ -784,7 +834,7 @@ namespace System.Threading.Tasks
             };
 
             bool isTaskCompleted = false;
-            lock (_lockObj)
+            lock (m_lockObj)
             {
                 isTaskCompleted = m_taskCompletedEvent.WaitOne(0, false);
                 if (!isTaskCompleted)
@@ -952,7 +1002,7 @@ namespace System.Threading.Tasks
         {
             get
             {
-                bool isDisposed = (_stateFlags & TASK_STATE_DISPOSED) != 0;
+                bool isDisposed = (m_stateFlags & TASK_STATE_DISPOSED) != 0;
                 if (isDisposed)
                     throw new ObjectDisposedException("Task");
 
